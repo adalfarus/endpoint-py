@@ -1,0 +1,6 @@
+[paths]
+source =
+    src/endpoint
+    */endpoint/src/endpoint
+    */work/endpoint/endpoint/src/endpoint
+    D:\a\endpoint\endpoint\src\endpoint

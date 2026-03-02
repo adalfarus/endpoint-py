@@ -1,68 +1,88 @@
-# ArguMint
- A fresh new way to handle cli. 
- 
-This package is just maintained (EOL) as I have rewritten large parts of the package (2k new LOC) and plan to release them under the new name autocli. This could take a 1-2 months though as the old owner of the name seems unresponsive.
+[![Active Development](https://img.shields.io/badge/Maintenance%20Level-Actively%20Developed-brightgreen.svg)](https://gist.github.com/cheerfulstoic/d107229326a01ff0f333a1d3476e068d)
+[![CI Test Status](https://github.com/Adalfarus/endpoint/actions/workflows/test-package.yml/badge.svg)](https://github.com/Adalfarus/endpoint/actions)
+[![License: LGPL-2.1](https://img.shields.io/github/license/Adalfarus/endpoint)](https://github.com/Adalfarus/endpoint/blob/main/LICENSE)
+[![PyPI Downloads](https://static.pepy.tech/badge/endpoint)](https://pepy.tech/projects/endpoint)
+![coverage](https://raw.githubusercontent.com/Adalfarus/endpoint/refs/heads/main/coverage-badge.svg)
 
-I have also updated it with the latest code from aplustools.package.autocli and applied a few patches and quality of life enhancements.
+# endpoint
 
-## How to use it
-```python
-from argumint import Argumint, ArgumentParsingError
-from typing import Literal
+endpoint is a small timer utility that has all the helpful features you could ever want.
 
+## Compatibility
+🟩 (Works perfectly); 🟨 (Untested); 🟧 (Some Issues); 🟥 (Unusable)
 
-def sorry(*args, **kwargs):
-    print("This path does not have an endpoint, please use aps help to get help.")
+| OS                       |   |
+|--------------------------|---|
+| Windows                  | 🟩 |
+| MacOS                    | 🟩 |
+| Linux (Ubuntu 22.04 LTS) | 🟩 |
 
-def help_text():
-    print("Build -> dir/file or help.")
+## Features
 
-def build_file(path: Literal["./main.py", "./file.py"] = "./main.py", num: int = 0):
-    """
-    build_file
-    :param path: The path to the file that should be built.
-    :param num:
-    :return None:
-    """
-    print(f"Building file {path} ..., {num}")
+- Easy to use for beginners, but not lacking for experts
+- Efficient
+- Fully cross-platform
+- Regular updates and support
+- Comprehensive documentation
 
-from chronix import FlexTimer
+## Installation
 
-timer = FlexTimer()
+You can install endpoint via pip:
 
-# Initialization
-parser = Argumint(default_endpoint=sorry, arg_struct={
-    'aps': {
-        'build': {
-            'file': {},
-            'dir': {
-                'main': {},
-                'all': {}
-            }
-        },
-        'help': {}
-    }
-})
-
-# Add endpoints
-parser.add_endpoint("aps.help", help_text)
-parser.add_endpoint("aps.build.file", build_file)
-
-# Testing
-try:
-    print("---- 1 ----")
-    parser.parse_cli(["main.py", "help"], "native_light")
-    print(timer.lap().to_readable())
-    print("---- 2 ----")
-    parser.parse_cli(["main.py", "build", "file", "./file.py", "--num=19"], "native_light")
-    print(timer.lap().to_readable())
-    print("---- 3 ----")
-    parser.parse_cli(mode="native_light")
-    print(timer.lap().to_readable())
-    print("---- 4 ----")
-    parser.parse_cli(["main.py", "build", "file", "./file.py", "--num", "=", "19"], "native_light")  # Error
-    print(timer.lap().to_readable())
-except ArgumentParsingError as e:
-    print(f"There was an error while parsing '{e}'.")
-timer.end()
+```sh
+pip install endpoint --pre --upgrade
 ```
+
+Or clone the repository and install manually:
+
+```sh
+git clone https://github.com/Adalfarus/endpoint.git
+cd endpoint
+python -m pip install .
+```
+
+If you have problems with the package please use `py -m pip install endpoint[dev] --pre --upgrade --user`
+
+## 📦 Usage
+
+Here are a few quick examples of how to use `endpoint`.
+
+## TBA
+
+---
+
+## Naming convention, dependencies and library information
+[PEP 8 -- Style Guide for Python Code](https://peps.python.org/pep-0008/#naming-conventions)
+
+For modules I use 'lowercase', classes are 'CapitalizedWords' and functions and methods are 'lower_case_with_underscores'.
+
+## Contributing
+
+We welcome contributions! Please see our [contributing guidelines](https://github.com/adalfarus/endpoint/blob/main/CONTRIBUTING.md) for more details on how you can contribute to endpoint.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a pull request
+
+### Aps Build master
+
+You can use the aps_build_master script for your os to make your like a lot easier.
+It supports running tests, installing, building and much more as well as chaining together as many commands as you like.
+
+This example runs test, build the project and then installs it
+````commandline
+call .\aps_build_master.bat 234
+````
+
+````shell
+sudo apt install python3-pip
+sudo apt install python3-venv
+chmod +x ./aps_build_master.sh
+./aps_build_master.sh 234
+````
+
+## License
+
+endpoint is licensed under the LGPL-2.1 License - see the [LICENSE](https://github.com/adalfarus/endpoint/blob/main/LICENSE) file for details.

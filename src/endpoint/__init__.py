@@ -11,7 +11,7 @@ if _ty.TYPE_CHECKING:
     import _typeshed as _tsh
 import types as _ts
 
-__version__ = "1.0.6"
+__all__ = ["NoDefault", "analyze_function", "Endpoint", "AutoCLI"]
 
 
 class NoDefault:
@@ -46,10 +46,6 @@ def analyze_function(function: _a.Callable) -> dict[str, list[_ty.Any] | str | N
             - "return_choices" (List[Any] or []): Options for `Literal` type hints for the return type, if applicable.
             - "return_doc_help" (str): The extracted docstring help for the return type.
     """
-    if (not isinstance(function, _ts.FunctionType)
-            and hasattr(function, "__call__")
-            and isinstance(function.__call__, _ts.FunctionType)):
-        function = function.__call__
     if hasattr(function, "__func__"):
         function = function.__func__
     elif not isinstance(function, _ts.FunctionType):
@@ -74,13 +70,13 @@ def analyze_function(function: _a.Callable) -> dict[str, list[_ty.Any] | str | N
     type_hints = _ty.get_type_hints(function)
 
     pos_argcount = function.__code__.co_argcount  # After which i we have kwarg only
-    # if has_args:
-    #     argument_names.insert(pos_argcount, "args")
-    #     defaults.insert(pos_argcount, None)
-    #     pos_argcount += 1
-    # if has_kwargs:
-    #     argument_names.append("kwargs")
-    #     defaults.append(None)
+    if has_args:
+        argument_names.insert(pos_argcount, "args")
+        defaults.insert(pos_argcount, None)
+        pos_argcount += 1
+    if has_kwargs:
+        argument_names.append("kwargs")
+        defaults.append(None)
     argument_names.append("return")
     defaults.append(None)
 
@@ -96,12 +92,15 @@ def analyze_function(function: _a.Callable) -> dict[str, list[_ty.Any] | str | N
     }
     for i, (argument_name, default) in enumerate(zip(argument_names, defaults)):
         argument_start = docstring.find(argument_name)
-        help_str, choices = "", []
+        help_str, choices, type_choices = "", tuple(), tuple()
         if argument_start != -1:
             help_start = argument_start + len(
                 argument_name
             )  # Where argument_name ends in docstring
-            next_line = argument_start + docstring[argument_start:].find("\n")
+            newline_offset = docstring[argument_start:].find("\n")
+            if newline_offset == -1:
+                newline_offset = len(docstring) - argument_start
+            next_line = argument_start + newline_offset
             help_str = docstring[help_start:next_line].strip(": \n\t")
         if argument_name == "return":
             type_hint = result["return_type"]
@@ -113,12 +112,15 @@ def analyze_function(function: _a.Callable) -> dict[str, list[_ty.Any] | str | N
         type_hint = type_hints.get(argument_name)
         if getattr(type_hint, "__origin__", None) is _ty.Literal:
             choices = type_hint.__args__
+        elif getattr(type_hint, "__origin__", None) is _ty.Union or type(type_hint) is _ts.UnionType:
+            type_choices = type_hint.__args__
         result["arguments"].append(
             {
                 "name": argument_name,
                 "default": default,
                 "choices": choices,
                 "type": types.get(argument_name),
+                "type_choices": type_choices,
                 "doc_help": help_str,
                 "kwarg_only": True if i >= pos_argcount else False,
             }
@@ -142,7 +144,7 @@ class ArgumentParsingError(Exception):
         self.index: int = index
 
 
-class EndPoint:
+class Endpoint:
     """Represents the endpoint of a trace from an argument structure object.
 
     The `EndPoint` class serves as a container for functions associated with
@@ -158,14 +160,14 @@ class EndPoint:
             which will be called when the endpoint is invoked.
     """
 
-    def __init__(self, function: _a.Callable) -> None:
+    def __init__(self, function: _ts.FunctionType) -> None:
         self.analysis: dict[str, list[_ty.Any] | str | None] = analyze_function(
             function
         )
         self._arg_index: dict[str, int] = {
             arg["name"]: i for i, arg in enumerate(self.analysis["arguments"])
         }
-        self._function: _a.Callable = function
+        self._function: _ts.FunctionType = function
 
     def call(self, *args, **kwargs) -> None:
         """Executes the internal function using the specified arguments.
@@ -177,7 +179,6 @@ class EndPoint:
             *args: Positional arguments to pass to the function.
             **kwargs: Keyword arguments to pass to the function.
         """
-        kwargs = {k: v for (k, v) in kwargs.items() if k not in {"cls", "self"}}  # Hotfix
         self._function(*args, **kwargs)
 
     def __repr__(self) -> str:
@@ -279,11 +280,11 @@ class ArgStructBuilder:
         """
         return self._commands
 
-
 _A = _ty.TypeVar("_A")
+StructureType = dict[str, "StructureType", Endpoint | None]
 
 
-class Argumint:
+class AutoCLI:
     """A command-line argument parser that uses structured arguments and endpoints.
 
     Argumint is designed to parse CLI arguments using a predefined argument structure.
@@ -291,19 +292,32 @@ class Argumint:
     and execute endpoints based on parsed arguments.
 
     Attributes:
-        default_endpoint (EndPoint): The default endpoint to call if a path cannot be resolved.
-        _arg_struct (dict): The dictionary representing the current argument structure.
+        default_endpoint (Endpoint): The default endpoint to call if a path cannot be resolved.
+        _structure (dict): The dictionary representing the current argument structure.
         _endpoints (dict): A mapping of argument paths to endpoint functions.
     """
 
     def __init__(
-        self, default_endpoint: EndPoint | _a.Callable, arg_struct: dict[str, dict | str]
+        self, default_endpoint: Endpoint, structure: dict[str, dict | str | Endpoint] = {}, auto_add_structure: bool = True
     ) -> None:
-        if not isinstance(default_endpoint, EndPoint):
-            default_endpoint = EndPoint(default_endpoint)
-        self.default_endpoint: EndPoint = default_endpoint
-        self._arg_struct: dict[str, dict | str] = arg_struct
-        self._endpoints: dict[str, EndPoint] = {}
+        if not self._verify_structure(structure):
+            raise ValueError("Structure must be valid.")
+        self.default_endpoint: Endpoint = default_endpoint
+        self.structure: dict[str, dict | str] = structure
+        # self._structure: dict[str, dict | str] = structure
+        # self._endpoints: dict[str, Endpoint] = {}
+
+    @classmethod
+    def _verify_structure(cls, structure: dict[str, dict | str | Endpoint]) -> bool:
+        if any(type(x) not in (str,) for x in structure.keys()):
+            return False
+        for value in structure.values():
+            if isinstance(value, dict):
+                if not cls._verify_structure(value):
+                    return False
+            elif not isinstance(value, (str, Endpoint)):
+                return False
+        return True
 
     @staticmethod
     def _error(i: int, command_string: str) -> None:
@@ -350,7 +364,7 @@ class Argumint:
         Returns:
             bool: True if the path exists, False otherwise.
         """
-        overwrite_pre_args = overwrite_pre_args or self._arg_struct
+        overwrite_pre_args = overwrite_pre_args or self._structure
         current_level: str | dict[str, str | dict] = overwrite_pre_args
         for point in path.split("."):
             if point not in current_level or not isinstance(current_level[point], dict):
@@ -373,19 +387,19 @@ class Argumint:
                 continue
             else:
                 to_del.append(path)
-        self._arg_struct = new_arg_struct
+        self._structure = new_arg_struct
         print(
             f"Removed {len([self._endpoints.pop(epPath) for epPath in to_del])} endpoints."
         )
 
-    def add_endpoint(self, path: str, endpoint: EndPoint | _a.Callable) -> None:
+    def add_endpoint(self, path: str, endpoint: Endpoint) -> None:
         """Adds an endpoint at a specified path within the structure.
 
         The endpoint will be callable from the CLI if the provided path matches.
 
         Args:
             path (str): Dot-separated path where the endpoint will be added.
-            endpoint (EndPoint): The endpoint instance to associate with the path.
+            endpoint (Endpoint): The endpoint instance to associate with the path.
 
         Raises:
             ValueError: If the path does not exist within the argument structure
@@ -393,15 +407,13 @@ class Argumint:
         """
         if self._check_path(path):
             if not self._endpoints.get(path):
-                if not isinstance(endpoint, EndPoint):
-                    endpoint = EndPoint(endpoint)
                 self._endpoints[path] = endpoint
             else:
                 raise ValueError(f"The path {path} already has an endpoint.")
         else:
             raise ValueError(f"The path '{path}' doesn't exist.")
 
-    def replace_endpoint(self, path: str, endpoint: EndPoint | _a.Callable) -> None:
+    def replace_endpoint(self, path: str, endpoint: Endpoint) -> None:
         """Replaces an existing endpoint at a given path.
 
         This method checks if the specified path exists in the argument structure
@@ -410,14 +422,12 @@ class Argumint:
 
         Args:
             path (str): The path where the endpoint will be replaced.
-            endpoint (EndPoint): The new endpoint to assign to the specified path.
+            endpoint (Endpoint): The new endpoint to assign to the specified path.
 
         Raises:
             ValueError: If the specified path does not exist in the argument structure.
         """
         if self._check_path(path):
-            if not isinstance(endpoint, EndPoint):
-                endpoint = EndPoint(endpoint)
             self._endpoints[path] = endpoint
         else:
             raise ValueError(f"The path '{path}' doesn't exist.")
@@ -441,7 +451,7 @@ class Argumint:
         """
         struct_lst = []
 
-        current_struct = self._arg_struct
+        current_struct = self._structure
         i = call = None
         try:
             for i, call in enumerate(pre_args):
@@ -502,7 +512,7 @@ class Argumint:
 
     @classmethod
     def _parse_args_native_light(
-        cls, args: list[str], endpoint: EndPoint, smart_typing: bool = True
+        cls, args: list[str], endpoint: Endpoint, smart_typing: bool = True
     ) -> dict[str, _ty.Any]:
         """Parses command-line arguments in a lightweight manner.
 
@@ -512,7 +522,7 @@ class Argumint:
 
         Args:
             args (list[str]): The list of arguments from the CLI.
-            endpoint (EndPoint): The endpoint for which arguments are parsed.
+            endpoint (Endpoint): The endpoint for which arguments are parsed.
             smart_typing (bool, optional): If True, attempts to match argument types
                 intelligently based on their default values.
 
@@ -590,7 +600,7 @@ class Argumint:
 
     @staticmethod
     def _parse_args_arg_parse(
-        args: list[str], endpoint: EndPoint
+        args: list[str], endpoint: Endpoint
     ) -> dict[str, _ty.Any]:
         """Parses command-line arguments using the argparse library.
 
@@ -599,7 +609,7 @@ class Argumint:
 
         Args:
             args (list[str]): The list of command-line arguments to parse.
-            endpoint (EndPoint): The endpoint that defines the argument structure.
+            endpoint (Endpoint): The endpoint that defines the argument structure.
 
         Returns:
             dict[str, _ty.Any]: A dictionary of parsed argument names and values.
@@ -630,7 +640,7 @@ class Argumint:
     def _parse_args(
         self,
         args: list[str],
-        endpoint: EndPoint,
+        endpoint: Endpoint,
         mode: _ty.Literal["arg_parse", "native_light"] = "arg_parse",
     ) -> dict[str, _ty.Any]:
         """Dispatches argument parsing to a specified mode.
@@ -640,7 +650,7 @@ class Argumint:
 
         Args:
             args (list[str]): The list of command-line arguments.
-            endpoint (EndPoint): The endpoint defining argument requirements.
+            endpoint (Endpoint): The endpoint defining argument requirements.
             mode (Literal["arg_parse", "native_light"], optional): Parsing mode.
                 Defaults to `"arg_parse"`, but `"native_light"` can be used for lightweight parsing.
 
@@ -654,8 +664,11 @@ class Argumint:
         )
         return func(args, endpoint)
 
-    def parse_cli(self, arguments: list[str] | None = None,
-                  mode: _ty.Literal["arg_parse", "native_light"] = "arg_parse") -> None:
+    def parse_cli(
+        self,
+        system: sys = sys,
+        mode: _ty.Literal["arg_parse", "native_light"] = "arg_parse",
+    ) -> None:
         """Parses CLI arguments and calls the endpoint based on the parsed path.
 
         This method processes command-line input, navigates the argument structure,
@@ -663,13 +676,12 @@ class Argumint:
         the `default_endpoint`.
 
         Args:
-            arguments (list, optional): Arguments to parse, if None, use sys.argv instead.
+            system (sys, optional): System module to access arguments from `argv`.
             mode (Literal["arg_parse", "native_light"], optional): Mode to parse
                 arguments. Defaults to `"arg_parse"`, but `"native_light"` can be used
                 for lightweight parsing.
         """
-        arguments = (arguments or sys.argv)
-        arguments[0] = list(self._arg_struct.keys())[0]  # Implant correct root node
+        arguments = system.argv
         pre_args = self._parse_pre_args(arguments)
         path = ".".join(pre_args)
         preargs_stop_idx: int

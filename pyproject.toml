@@ -3,31 +3,59 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["argumint"]
+packages = [
+  "endpoint",
+  "endpoint.tests",
+]
+include-package-data = true
+package-dir = {"" = "src"}
+
+[tool.ruff]
+line-length = 88  # For PEP8 compliance
+exclude = [
+    "src/endpoint/tests/*",
+    "scripts/*",
+]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = ["E501", "F401", "F403"]  # E501 Line length checks for now; F401 & F403 because they are used for type checking
+exclude = [
+    "src/endpoint/tests/*",
+    "scripts/*",
+]
 
 [project]
-name = "argumint"
-version = "1.0.6"
+name = "endpoint"
+version = "2.0.0.6"
 dependencies = ["typing_extensions"]
-requires-python = ">=3.10"
+requires-python = ">= 3.10"
 authors = [
   {name = "Cariel Becker", email = "cariel.becker@gmx.de"},
 ]
 maintainers = [
   {name = "Cariel Becker", email = "cariel.becker@gmx.de"},
 ]
-description = "A fresh new way to handle cli"
+description = "A small timer utility that has all the helpful features you could ever want!"
 readme = {file = "README.md", content-type = "text/markdown"}
-license = {text = "LGPL-3.0-only"}
-keywords = ["cli", "command line", "simplified", "fresh", "auto", "automatic"]
+license = "LGPL-3.0-only"
+keywords = ["general", "tools", "app tools", "production", "apt"]
 classifiers = [
-  "Development Status :: 4 - Beta",
-  "Programming Language :: Python",
-  "Natural Language :: English",
+	"Development Status :: 5 - Production/Stable",
+	"Programming Language :: Python",
+	"Natural Language :: English"
 ]
 
+[project.optional-dependencies]
+dev = ["pytest", "coverage", "pre-commit", "ruff", "pdoc>=14.0"]
+
 [project.urls]
-Home = "https://pypi.org/project/argumint/"
-Repository = "https://github.com/adalfarus/argumint"
-Documentation = "https://github.com/adalfarus/argumint/wiki"
-"Issue tracker" = "https://github.com/adalfarus/argumint/issues"
+Home = "https://pypi.org/project/endpoint.py/"
+Repository = "https://github.com/adalfarus/endpoint.py"
+Documentation = "https://github.com/adalfarus/endpoint.py/wiki"
+"Issue tracker" = "https://github.com/adalfarus/endpoint.py/issues"
+
+#[tool.pytest.ini_options]
+## This is equivalent to setup_requires and tests_require
+## Add your pytest configuration here
+#addopts = "your pytest options"
