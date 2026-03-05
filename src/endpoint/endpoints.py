@@ -496,11 +496,14 @@ class NativeEndpoint(EndpointProtocol):
                                 metavar=argument.metavar, required=argument.required)
         else:
             warnings.warn("ArgParse doesn't support arguments that can be both positional and kwarg out of the box. "
-                          "Please remember to apply defaults for those yourself after parsing! "
+                          "Please remember to apply defaults for those yourself after parsing! Additionally in py3.11 "
+                          "there is a bug where the argparse.SUPRESS keyword is fed into an argument converted leading "
+                          "to a crash for positional values that have both argpase.SUPRESS and type=... . "
+                          "So you need to omit type and convert it afterwards yourself."
                           "Alternatively you can use ArgparseEndpoint with .set_implicit_argument_default(...) "
                           "instead of raw argparse.", stacklevel=2)
             parser.add_argument(argument.name, help=argument.help,  # Positional
-                                default=argparse.SUPPRESS, type=argument.type,
+                                default=argparse.SUPPRESS, # type=argument.type,  # py3.11 argparse bug fix
                                 choices=argument.choices if argument.choices else None,
                                 metavar=argument.metavar, nargs="?")
             parser.add_argument(*names, help=argument.help, dest=argument.name,  # Kwarg
@@ -509,6 +512,7 @@ class NativeEndpoint(EndpointProtocol):
                                 metavar=argument.metavar, required=argument.required)
             if isinstance(parser, ArgparseEndpoint):
                 parser.set_implicit_argument_default(argument.name, argument.default)
+                parser.set_implicit_argument_type(argument.name, argument.type)
 
     def to_argparse(self) -> ArgumentParser:
         """Build a standalone :class:`argparse.ArgumentParser`.
@@ -600,6 +604,7 @@ class ArgparseEndpoint(EndpointProtocol):
         self._func: _a.Callable | None = None
         self._help_str: str = ""
         self._argument_defaults: dict[str, _ty.Any] = dict()
+        self._argument_types: dict[str, _ty.Any] = dict()
 
     def set_calling_func(self, func: _a.Callable) -> None:
         """Set the callback executed after parsing.
@@ -629,6 +634,14 @@ class ArgparseEndpoint(EndpointProtocol):
         :param default: Value used when argparse suppresses the destination.
         """
         self._argument_defaults[arg_name] = default
+
+    def set_implicit_argument_type(self, arg_name: str, default: _ty.Any) -> None:
+        """Store type for mixed positional/keyword argument cases.
+
+        :param arg_name: Argument destination name.
+        :param default: Type used when argparse "cannot" convert the type due to a bug.
+        """
+        self._argument_types[arg_name] = default
 
     def clear_implicit_argument_defaults(self) -> None:
         """Remove all stored implicit defaults."""
@@ -696,8 +709,10 @@ class ArgparseEndpoint(EndpointProtocol):
         ns = self._parser.parse_args(argv)
 
         for argument_name, argument_default in self._argument_defaults.items():
-            if not hasattr(ns, argument_name):
+            if not hasattr(ns, argument_name) or getattr(ns, argument_name) == argparse.SUPPRESS:
                 setattr(ns, argument_name, argument_default)
+            elif type_ := self._argument_types.get(argument_name):
+                setattr(ns, argument_name, type_(getattr(ns, argument_name)))
 
         parsed = vars(ns)
 
