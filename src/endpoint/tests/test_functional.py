@@ -65,8 +65,7 @@ def test_parse_mode_overloads_still_exposed_as_single_endpoint() -> None:
 def test_pretty_type_and_break_type_basic_shapes() -> None:
     assert pretty_type(int) == "int"
 
-    if sys.version_info > (3, 10):
-        raise Exception(sys.version_info)
+    if sys.version_info >= (3, 11):
         assert pretty_type(list[int]) == "list[int]"
     else:
         assert pretty_type(list[int]) == "list"
