@@ -66,6 +66,7 @@ def test_pretty_type_and_break_type_basic_shapes() -> None:
     assert pretty_type(int) == "int"
 
     if sys.version_info > (3, 10):
+        raise Exception(sys.version_info)
         assert pretty_type(list[int]) == "list[int]"
     else:
         assert pretty_type(list[int]) == "list"
