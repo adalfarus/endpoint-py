@@ -58,7 +58,7 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        coverage run --data-file=data.coverage -m pytest src/chronix/tests
+        coverage run --data-file=data.coverage -m pytest src/endpoint/tests
 
     - name: Upload coverage data
       uses: actions/upload-artifact@v4

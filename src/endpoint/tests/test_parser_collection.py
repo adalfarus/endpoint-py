@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from typing import Literal, Optional
+
 import pytest
 
 from ..native_parser import Argument, NArgsMode, NArgsSpec
 from ..parser_collection import (
+    ArgparseParser,
+    ArgumentParsingError,
     FastParser,
     LightParser,
     StrictDFAParser,
@@ -101,3 +105,94 @@ def test_tiny_parser_defaults_and_required() -> None:
     assert kw["value"] == 10
     assert kw["opt"] == 5
 
+
+def test_argument_parsing_error_str_and_parser_flag_introspection() -> None:
+    err = ArgumentParsingError("boom", idx=2, endpoint_path="ep.path")
+    assert "boom" in str(err)
+    assert "(idx=2)" in str(err)
+    assert "[ep.path]" in str(err)
+
+    assert "smart_typing" in LightParser({}).list_known_flags()
+    assert "repeatable_collections" in TokenStreamParser({}).list_known_flags()
+    assert "DFA_ASSIGN_TOKENS" in StrictDFAParser({}).list_known_flags()
+    assert "FAST_ASSIGN_CHAR" in FastParser({}).list_known_flags()
+    assert TinyParser({}).list_known_flags() == {}
+
+
+def test_explain_flag_methods_currently_not_implemented_or_empty() -> None:
+    with pytest.raises(NotImplementedError):
+        LightParser({}).explain_flag("x")
+    with pytest.raises(NotImplementedError):
+        TokenStreamParser({}).explain_flag("x")
+    with pytest.raises(NotImplementedError):
+        StrictDFAParser({}).explain_flag("x")
+    with pytest.raises(NotImplementedError):
+        FastParser({}).explain_flag("x")
+    assert TinyParser({}).explain_flag("x") == ""
+
+
+def test_type1_coerce_from_type_literal_union_and_tuple_arity() -> None:
+    p = LightParser({})
+    mode = _arg("mode", str)
+    mode.type = Literal["fast", "slow"]  # type: ignore[assignment]
+    assert p._coerce_from_type("fast", mode) == "fast"
+    # Current implementation falls back to `type(c)(value)` and accepts arbitrary strings.
+    assert p._coerce_from_type("bad", mode) == "bad"
+
+    maybe = _arg("maybe", str)
+    maybe.type = Optional[int]  # type: ignore[assignment]
+    assert p._coerce_from_type("3", maybe) == 3
+    assert p._coerce_from_type("none", maybe) is None
+
+    pair = _arg("pair", str)
+    pair.type = tuple[int, str]  # type: ignore[assignment]
+    assert p._coerce_from_type("1,a", pair) == (1, "a")
+    with pytest.raises(ArgumentParsingError):
+        p._coerce_from_type("1", pair)
+
+
+def test_token_stream_parser_end_of_options_and_missing_value_error() -> None:
+    p = TokenStreamParser({"interleaved_positionals": False})
+    args = [_arg("value", int, required=True)]
+
+    _, kw = p.parse_args(["--", "7"], args, endpoint_path="ep")
+    assert kw["value"] == 7
+
+    with pytest.raises(ArgumentParsingError):
+        p.parse_args(["--value"], args, endpoint_path="ep")
+
+
+def test_argparse_parser_filters_disabled_flags_and_rejects_extra() -> None:
+    p = ArgparseParser({"allow_abbrev": False, "--value": False})
+    args = [_arg("value", int, required=True)]
+
+    with pytest.raises(ArgumentParsingError):
+        p.parse_args(["junk"], args, endpoint_path="ep")
+
+
+def test_strict_dfa_parser_errors_and_short_inline_assignment() -> None:
+    p = StrictDFAParser({})
+    args = [
+        _arg("flag", bool, default=False),
+        _arg("value", int, required=True),
+    ]
+
+    _, kw = p.parse_args(["-v=3", "--flag"], args, endpoint_path="ep")
+    assert kw["value"] == 3
+    assert kw["flag"] is True
+
+    with pytest.raises(ArgumentParsingError):
+        p.parse_args(["10", "--flag"], args, endpoint_path="ep")
+
+
+def test_fast_and_tiny_error_paths() -> None:
+    with pytest.raises(ValueError):
+        FastParser({"FAST_ASSIGN_CHAR": "::"})
+
+    fp = FastParser({"FAST_ALLOW_POSITIONALS": False})
+    with pytest.raises(ArgumentParsingError):
+        fp.parse_args(["10"], [_arg("value", int, required=True)], endpoint_path="ep")
+
+    tp = TinyParser({})
+    _, kw = tp.parse_args([], [_arg("value", int, required=True)], endpoint_path="ep")
+    assert "value" in kw

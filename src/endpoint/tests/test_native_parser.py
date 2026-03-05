@@ -5,6 +5,9 @@ import pytest
 from ..native_parser import (
     Argument,
     ArgumentParsingError,
+    NativeIterableParserFragment,
+    NativeParserFragment,
+    NativeUnionParserFragment,
     NativeBoolParserFragment,
     NativeBytesParserFragment,
     NativeComplexParserFragment,
@@ -19,7 +22,9 @@ from ..native_parser import (
     NativeTupleParserFragment,
     NArgsMode,
     NArgsSpec,
+    ParsingErrorSeverity,
     TokenStream,
+    ValueParsingError,
 )
 from ..functional import BrokenType, NoDefault
 
@@ -196,3 +201,80 @@ def test_native_parser_allows_unknown_kwargs_when_flag_disabled() -> None:
     # Unknown kwarg should be preserved when ERROR_IF_TOO_MANY_KWARGS is False
     assert kw["unknown"] == ["5"]
 
+
+def test_nargs_min_max_helpers_and_validation() -> None:
+    with pytest.raises(ValueError):
+        NArgsMode.MIN_MAX(-1, 1)
+
+    mm = NArgsMode.MIN_MAX(1, None)
+    assert mm.is_lower_max(999) is True
+    assert mm.is_higher_min(2) is True
+
+
+def test_argument_rendering_helpers_cover_readable_methods() -> None:
+    arg = _arg_for("value", int, default=3, required=True, positional_only=False)
+    arg.alternative_names = ["val"]
+    arg.letter = "v"
+    arg.help = "value help"
+    arg.choices = [1, 2, 3]
+
+    assert "-v" in arg.option_names()
+    assert "--value" in arg.option_names()
+    assert "required" in arg.right_column()
+    assert "default: 3" in arg.right_column()
+    assert "Argument(value)" == arg.as_readable()
+    assert isinstance(hash(arg), int)
+    assert "value" in arg.usage_fragment()
+    assert "--value" in arg.left_column()
+
+
+def test_argument_and_value_parsing_error_helpers() -> None:
+    stream = TokenStream("abc")
+    stream.consume()
+
+    err = ArgumentParsingError("boom", ParsingErrorSeverity.REACHED_INVALID_STATE, stream)
+    with pytest.raises(ArgumentParsingError):
+        err.raise_()
+    assert ">" in err.show()
+    assert "boom" in str(err)
+
+    verr = ValueParsingError("vboom", None)
+    assert "vboom" in str(verr)
+    assert "vboom" in repr(verr)
+
+
+def test_token_stream_additional_helpers() -> None:
+    ts = TokenStream("abcd")
+    ts.set_index(2)
+    assert ts.consume_remaining() == "cd"
+    ts.restart()
+    assert ts.get_index() == 0
+    assert "TokenStream" in str(ts)
+
+
+def test_native_parser_fragment_base_iter_set_errors() -> None:
+    frag = NativeParserFragment()
+    with pytest.raises(ValueError):
+        list(frag.iter("x", BrokenType(base_type=str, arguments=())))
+    with pytest.raises(ValueError):
+        frag.set("x", [(0, "y")])
+
+
+def test_native_union_and_iterable_fragment_edge_paths() -> None:
+    ufrag = NativeUnionParserFragment()
+    assert ufrag.parse(["a"], False) == ["a"]
+    rows = list(ufrag.iter("raw", BrokenType(base_type=None, arguments=())))
+    assert rows[0][1] == "raw"
+
+    ifrag = NativeIterableParserFragment(parse_python_types=False, error_if_unsure=True)
+    err = ifrag.parse(["single"], False)
+    assert isinstance(err, ArgumentParsingError)
+
+
+def test_native_parser_list_known_flags_and_explain_not_implemented() -> None:
+    parser = NativeParser({})
+    flags = parser.list_known_flags()
+    assert "ERROR_IF_TOO_MANY_KWARGS" in flags
+    assert "STR_DELIMITERS" in flags
+    with pytest.raises(NotImplementedError):
+        parser.explain_flag("STR_DELIMITERS")
