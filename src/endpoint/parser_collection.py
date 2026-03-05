@@ -305,16 +305,13 @@ class LightParser(Type1Parser):
 
 
 class TokenStreamParser(Type1Parser):
-    """Streaming parser supporting option/positional interleaving.
+    """Feature-rich token-stream parser.
 
-    Features include:
-
-    - ``--`` end-of-options separator support.
-    - Interleaved positionals and options when enabled.
-    - Repeated collection merging:
-      ``--tags=a --tags=b`` -> ``tags=['a', 'b']``.
-    - Last-value-wins behavior for non-collection parameters.
+    This implementation focuses on broad CLI compatibility while remaining
+    independent from the other parser implementations in this module.
     """
+
+    IS_FULLY_FEATURED: bool = True
 
     def __init__(self, enabled_flags: dict[str, _ty.Any]) -> None:
         """Initialize stream parser flags.
@@ -323,14 +320,38 @@ class TokenStreamParser(Type1Parser):
         :return: None.
         """
         self._enabled_flags = enabled_flags
-        self.repeatable = enabled_flags.get("repeatable_collections", True)
-        self.interleaved = enabled_flags.get("interleaved_positionals", True)
+        self.repeatable: bool = enabled_flags.get("repeatable_collections", True)
+        self.interleaved: bool = enabled_flags.get("interleaved_positionals", True)
+        self.allow_combined_short: bool = enabled_flags.get("allow_combined_short", True)
+        self.allow_inline_short_value: bool = enabled_flags.get("allow_inline_short_value", True)
+        self.allow_long_equals: bool = enabled_flags.get("allow_long_equals", True)
+        self.allow_short_equals: bool = enabled_flags.get("allow_short_equals", True)
+        self.allow_values_starting_with_dash: bool = enabled_flags.get("allow_values_starting_with_dash", False)
+        self.allow_negative_bool_forms: bool = enabled_flags.get("allow_negative_bool_forms", True)
+        self.parse_literal_values: bool = enabled_flags.get("parse_literal_values", True)
+        self.enforce_positional_only: bool = enabled_flags.get("enforce_positional_only", True)
+        self.enforce_kwarg_only: bool = enabled_flags.get("enforce_kwarg_only", True)
+        self.unknown_as_positional: bool = enabled_flags.get("unknown_as_positional", False)
+        self.option_terminator: str = enabled_flags.get("option_terminator", "--")
+        self.duplicate_policy: str = enabled_flags.get("duplicate_policy", "last")
 
     def list_known_flags(self) -> dict[str, type[_ty.Any]]:
         """Return supported configuration flags."""
         return {
             "repeatable_collections": bool,
             "interleaved_positionals": bool,
+            "allow_combined_short": bool,
+            "allow_inline_short_value": bool,
+            "allow_long_equals": bool,
+            "allow_short_equals": bool,
+            "allow_values_starting_with_dash": bool,
+            "allow_negative_bool_forms": bool,
+            "parse_literal_values": bool,
+            "enforce_positional_only": bool,
+            "enforce_kwarg_only": bool,
+            "unknown_as_positional": bool,
+            "option_terminator": str,
+            "duplicate_policy": str,
         }
 
     def explain_flag(self, flag_name: str) -> str:
@@ -342,11 +363,49 @@ class TokenStreamParser(Type1Parser):
         """
         explanations: dict[str, str] = {
             "repeatable_collections": (
-                "Allow repeated assignments for collection arguments. "
-                "For example, '--tags=a --tags=b' merges into a single value."
+                "Merge repeated assignments for collection-typed arguments instead "
+                "of overriding previous values."
             ),
             "interleaved_positionals": (
-                "Allow positional arguments to appear interleaved with options."
+                "Allow positional arguments to appear between options."
+            ),
+            "allow_combined_short": (
+                "Allow compact short boolean forms like '-abc' as '-a -b -c'."
+            ),
+            "allow_inline_short_value": (
+                "Allow inline values in short options (for example '-p8080')."
+            ),
+            "allow_long_equals": (
+                "Allow '--name=value' assignment syntax for long options."
+            ),
+            "allow_short_equals": (
+                "Allow '-n=value' assignment syntax for short options."
+            ),
+            "allow_values_starting_with_dash": (
+                "Allow option values to begin with '-' even when they look like options."
+            ),
+            "allow_negative_bool_forms": (
+                "Allow '--no-<name>' forms for boolean options to set them to False."
+            ),
+            "parse_literal_values": (
+                "Use literal parsing for containers and mappings when value strings "
+                "look like Python literals."
+            ),
+            "enforce_positional_only": (
+                "Reject option-style usage for arguments declared positional_only."
+            ),
+            "enforce_kwarg_only": (
+                "Reject positional usage for arguments declared kwarg_only."
+            ),
+            "unknown_as_positional": (
+                "Treat unknown option-like tokens as positional values when possible."
+            ),
+            "option_terminator": (
+                "Token that ends option parsing and switches all remaining input to positional mode."
+            ),
+            "duplicate_policy": (
+                "Conflict handling for repeated non-collection assignments: "
+                "'last', 'first', or 'error'."
             ),
         }
         key = flag_name.strip()
@@ -355,165 +414,494 @@ class TokenStreamParser(Type1Parser):
         return explanations[key]
 
     @staticmethod
-    def _build_name_index(arguments: list[Argument]) -> dict[str, Argument]:
-        """Build lookup table from accepted names to ``Argument``.
+    def _is_collection_type(tp: _ty.Any) -> bool:
+        """Check whether a type represents a sequence/set container."""
+        origin = _ty.get_origin(tp)
+        return tp in (list, tuple, set) or origin in (list, tuple, set)
 
-        :param arguments: Declared arguments.
-        :return: Name-to-argument mapping.
-        """
+    @staticmethod
+    def _is_mapping_type(tp: _ty.Any) -> bool:
+        """Check whether a type represents a mapping container."""
+        origin = _ty.get_origin(tp)
+        return tp is dict or origin is dict
+
+    @staticmethod
+    def _is_bool_type(tp: _ty.Any) -> bool:
+        """Check whether a type resolves to boolean semantics."""
+        if tp is bool:
+            return True
+        origin = _ty.get_origin(tp)
+        args = _ty.get_args(tp)
+        return origin is _ty.Union and bool in args
+
+    @staticmethod
+    def _is_negative_number(token: str) -> bool:
+        """Return whether token looks like a negative numeric literal."""
+        if len(token) < 2 or token[0] != "-":
+            return False
+        try:
+            float(token)
+            return True
+        except Exception:
+            return False
+
+    @staticmethod
+    def _flatten_once(value: _ty.Any) -> list[_ty.Any]:
+        """Flatten one nesting level when value is an iterable container."""
+        if isinstance(value, (list, tuple, set)):
+            return list(value)
+        return [value]
+
+    def _pack_multi_values(self, arg: Argument, values: list[_ty.Any]) -> _ty.Any:
+        """Pack multiple consumed values into an argument-appropriate shape."""
+        if len(values) == 1:
+            return values[0]
+        if self._is_mapping_type(arg.type):
+            merged: dict[_ty.Any, _ty.Any] = {}
+            for v in values:
+                if isinstance(v, dict):
+                    merged.update(v)
+                else:
+                    raise ArgumentParsingError(
+                        f"Expected mapping chunks for '{arg.name}', got {type(v).__name__}"
+                    )
+            return merged
+        if self._is_collection_type(arg.type):
+            origin = _ty.get_origin(arg.type) or arg.type
+            flat: list[_ty.Any] = []
+            for v in values:
+                flat.extend(self._flatten_once(v))
+            if origin is set:
+                return set(flat)
+            if origin is tuple:
+                return tuple(flat)
+            return flat
+        return values
+
+    def _accepts_option(self, endpoint_path: str, option_spelling: str) -> bool:
+        """Check whether one option spelling is enabled by runtime flags."""
+        if option_spelling in self._enabled_flags:
+            return bool(self._enabled_flags[option_spelling])
+        per_endpoint = self._enabled_flags.get(endpoint_path)
+        if isinstance(per_endpoint, dict):
+            return bool(per_endpoint.get(option_spelling, True))
+        return True
+
+    def _build_name_index(self, arguments: list[Argument], endpoint_path: str) -> dict[str, Argument]:
+        """Build option-name index with duplicate detection and filtering."""
         idx: dict[str, Argument] = {}
-        for a in arguments:
-            idx[a.name] = a
-            for alt in a.alternative_names:
-                idx[alt] = a
-            if a.letter:
-                idx[a.letter] = a
+        for arg in arguments:
+            long_names = [arg.metavar, *arg.alternative_names, arg.name]
+            for n in long_names:
+                opt = f"--{n}" if not n.startswith("--") else n
+                if not self._accepts_option(endpoint_path, opt):
+                    continue
+                k = n.removeprefix("-")
+                if k in idx and idx[k] is not arg:
+                    raise ArgumentParsingError(f"Ambiguous option name '{k}'")
+                idx[k] = arg
+            if arg.letter:
+                opt = f"-{arg.letter}"
+                if self._accepts_option(endpoint_path, opt):
+                    if arg.letter in idx and idx[arg.letter] is not arg:
+                        raise ArgumentParsingError(f"Ambiguous short option '{arg.letter}'")
+                    idx[arg.letter] = arg
         return idx
+
+    def _coerce_python_value(self, value: _ty.Any, tp: _ty.Any) -> _ty.Any:
+        """Coerce a Python value into one target type recursively."""
+        origin = _ty.get_origin(tp)
+        args = _ty.get_args(tp)
+
+        if tp is _ty.Any:
+            return value
+        if tp is bool:
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, str):
+                v = value.strip().lower()
+                if v in {"1", "true", "t", "yes", "y", "on"}:
+                    return True
+                if v in {"0", "false", "f", "no", "n", "off"}:
+                    return False
+            raise ValueError(f"Cannot coerce {value!r} to bool")
+        if origin is _ty.Union:
+            last: Exception | None = None
+            for opt in args:
+                if opt is type(None):  # noqa: E721
+                    if value is None:
+                        return None
+                    continue
+                try:
+                    return self._coerce_python_value(value, opt)
+                except Exception as e:  # pragma: no cover - fallback path
+                    last = e
+            raise ValueError(f"Cannot coerce {value!r} into union {args!r}") from last
+        if origin is _ty.Literal:
+            allowed = set(args)
+            if value in allowed:
+                return value
+            raise ValueError(f"Value {value!r} not in Literal{tuple(args)!r}")
+
+        if origin in (list, set, tuple):
+            elem_t = args[0] if args else _ty.Any
+            if not isinstance(value, (list, tuple, set)):
+                value = [value]
+            seq = [self._coerce_python_value(v, elem_t) for v in value]
+            if origin is set:
+                return set(seq)
+            if origin is tuple:
+                return tuple(seq)
+            return seq
+
+        if origin is dict:
+            key_t, val_t = (args + (_ty.Any, _ty.Any))[:2]
+            if not isinstance(value, dict):
+                raise ValueError(f"Expected dict-like value, got {type(value).__name__}")
+            return {
+                self._coerce_python_value(k, key_t): self._coerce_python_value(v, val_t)
+                for k, v in value.items()
+            }
+
+        if isinstance(tp, type):
+            if isinstance(value, tp):
+                return value
+            return tp(value)
+        return value
+
+    def _coerce_value(self, raw: str, arg: Argument) -> _ty.Any:
+        """Coerce one raw token using string and literal-aware strategies."""
+        try:
+            return self._coerce_from_type(raw, arg)
+        except Exception as direct_err:
+            if not self.parse_literal_values:
+                raise ArgumentParsingError(str(direct_err))
+            try:
+                lit = ast.literal_eval(raw)
+            except Exception:
+                # Fallback: parse simple "k=v,k2=v2" dict syntax when mapping expected.
+                if self._is_mapping_type(arg.type) and "=" in raw:
+                    parts = [p for p in raw.split(",") if p.strip()]
+                    parsed_map: dict[_ty.Any, _ty.Any] = {}
+                    key_t: _ty.Any = str
+                    val_t: _ty.Any = str
+                    o = _ty.get_origin(arg.type)
+                    a = _ty.get_args(arg.type)
+                    if o is dict and len(a) >= 2:
+                        key_t, val_t = a[0], a[1]
+                    for part in parts:
+                        key_raw, sep, val_raw = part.partition("=")
+                        if not sep:
+                            raise ArgumentParsingError(
+                                f"Invalid mapping entry '{part}' for '{arg.name}'"
+                            )
+                        key = self._coerce_python_value(key_raw.strip(), key_t)
+                        val = self._coerce_python_value(val_raw.strip(), val_t)
+                        parsed_map[key] = val
+                    return parsed_map
+                raise ArgumentParsingError(
+                    f"Could not convert '{raw}' to {arg.type} for '{arg.name}'"
+                ) from direct_err
+            try:
+                return self._coerce_python_value(lit, arg.type)
+            except Exception as literal_err:
+                raise ArgumentParsingError(
+                    f"Could not convert '{raw}' to {arg.type} for '{arg.name}'"
+                ) from literal_err
+
+    def _finalize_value(self, arg: Argument, value: _ty.Any) -> _ty.Any:
+        """Apply choices and custom validation hooks."""
+        self._validate_choices(value, arg)
+        if arg.checking_func is None:
+            return value
+        checked = arg.checking_func(arg, value)
+        if isinstance(checked, ArgumentParsingError):
+            raise checked
+        return checked
+
+    def _merge_value(self, parsed: dict[str, _ty.Any], arg: Argument, value: _ty.Any) -> None:
+        """Merge one argument value into parse output according to policies."""
+        collection_like = self._is_collection_type(arg.type) or self._is_mapping_type(arg.type)
+        if arg.name not in parsed:
+            parsed[arg.name] = value
+            return
+
+        if not collection_like or not self.repeatable:
+            if self.duplicate_policy == "first":
+                return
+            if self.duplicate_policy == "error":
+                raise ArgumentParsingError(f"Argument '{arg.name}' provided more than once")
+            parsed[arg.name] = value
+            return
+
+        existing = parsed[arg.name]
+        if isinstance(existing, dict):
+            if not isinstance(value, dict):
+                raise ArgumentParsingError(f"Cannot merge non-mapping value into '{arg.name}'")
+            existing.update(value)
+            return
+        if isinstance(existing, set):
+            existing.update(self._flatten_once(value))
+            return
+        if isinstance(existing, tuple):
+            parsed[arg.name] = existing + tuple(self._flatten_once(value))
+            return
+        if isinstance(existing, list):
+            existing.extend(self._flatten_once(value))
+            return
+        parsed[arg.name] = value
+
+    def _nargs_bounds(self, arg: Argument) -> tuple[int, int | None, _ty.Any]:
+        """Return normalized ``(min, max, spec)`` tuple for an argument."""
+        return arg.nargs.min, arg.nargs.max, arg.nargs.spec
+
+    def _desired_count(self, min_n: int, max_n: int | None, spec: _ty.Any) -> int | None:
+        """Compute preferred value count from nargs strategy."""
+        if max_n is not None and min_n == max_n:
+            return min_n
+        if hasattr(spec, "n"):
+            return spec.n
+        if getattr(spec, "name", None) == "MANY":
+            return max_n
+        return min_n
+
+    def _looks_like_option(self, token: str, name_index: dict[str, Argument]) -> bool:
+        """Return whether a token should be treated as an option marker."""
+        if token == self.option_terminator:
+            return True
+        if token == "-" or not token.startswith("-"):
+            return False
+        if self.allow_values_starting_with_dash and self._is_negative_number(token):
+            return False
+        if token.startswith("--"):
+            key = token[2:].split("=", 1)[0]
+            if key in name_index:
+                return True
+            if self.allow_negative_bool_forms and key.startswith("no-") and key[3:] in name_index:
+                return True
+            return not self.unknown_as_positional
+        body = token[1:]
+        if not body:
+            return False
+        first = body[0]
+        if first in name_index:
+            return True
+        return not self.unknown_as_positional
+
+    def _consume_values(
+        self,
+        args: list[str],
+        start_idx: int,
+        arg: Argument,
+        name_index: dict[str, Argument],
+        options_mode: bool,
+        option_token_idx: int,
+    ) -> tuple[_ty.Any, int]:
+        """Consume one argument's values based on nargs configuration."""
+        min_n, max_n, spec = self._nargs_bounds(arg)
+        preferred = self._desired_count(min_n, max_n, spec)
+        collected: list[_ty.Any] = []
+        i = start_idx
+
+        while i < len(args):
+            if max_n is not None and len(collected) >= max_n:
+                break
+            tok = args[i]
+            if options_mode and self._looks_like_option(tok, name_index):
+                break
+            collected.append(self._coerce_value(tok, arg))
+            i += 1
+            if preferred is not None and preferred >= 0 and len(collected) >= preferred:
+                if getattr(spec, "name", None) != "MANY":
+                    break
+
+        if len(collected) < min_n:
+            raise ArgumentParsingError(
+                f"Expected at least {min_n} value(s) for '{arg.name}', got {len(collected)}",
+                idx=option_token_idx,
+            )
+        return self._pack_multi_values(arg, collected), i
 
     def parse_args(
         self, args: list[str], arguments: list[Argument], endpoint_path: str
     ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
-        """Parse tokens with streaming semantics.
+        """Parse tokens with stream semantics and advanced option handling.
 
         :param args: Raw CLI tokens.
         :param arguments: Declared argument metadata.
         :param endpoint_path: Endpoint identifier for diagnostics.
         :return: Parsed ``(positionals, kwargs)``.
         """
-        name_index = self._build_name_index(arguments)
+        if self.duplicate_policy not in {"last", "first", "error"}:
+            raise ValueError("TokenStreamParser flag 'duplicate_policy' must be one of: 'last', 'first', 'error'")
 
-        positional = [a for a in arguments if a.type is not bool]
-        pos_i = 0
-
+        name_index = self._build_name_index(arguments, endpoint_path)
+        positional_args = [a for a in arguments if not a.kwarg_only]
+        positional_idx = 0
         parsed: dict[str, _ty.Any] = {}
+
         i = 0
         options_mode = True
-
-        def is_collection_type(t: _ty.Any) -> bool:
-            origin = _ty.get_origin(t)
-            return t in (list, set, tuple) or origin in (list, set, tuple)
-
-        def merge_value(a: Argument, v: _ty.Any) -> None:
-            # If repeatable is off, always "last value wins"
-            if not self.repeatable or not is_collection_type(a.type):
-                parsed[a.name] = v
-                return
-
-            existing = parsed.get(a.name)
-            if existing is None:
-                # initialize with the right container shape
-                if a.type in (set,) or _ty.get_origin(a.type) is set:
-                    parsed[a.name] = set(v) if isinstance(v, (list, tuple, set)) else {v}
-                elif a.type in (tuple,) or _ty.get_origin(a.type) is tuple:
-                    parsed[a.name] = tuple(v) if isinstance(v, (list, tuple)) else (v,)
-                else:
-                    parsed[a.name] = list(v) if isinstance(v, (list, tuple, set)) else [v]
-                return
-
-            # merge into existing
-            if isinstance(existing, set):
-                existing.update(v if isinstance(v, (list, tuple, set)) else [v])
-            elif isinstance(existing, tuple):
-                parsed[a.name] = existing + (tuple(v) if isinstance(v, (list, tuple)) else (v,))
-            else:  # list-like
-                existing.extend(v if isinstance(v, (list, tuple, set)) else [v])
-
         while i < len(args):
             tok = args[i]
 
-            # explicit end-of-options
-            if options_mode and tok == "--":
+            if options_mode and tok == self.option_terminator:
                 options_mode = False
                 i += 1
                 continue
 
-            # long option
             if options_mode and tok.startswith("--") and tok != "--":
-                keyval = tok[2:]
-                key, eq, maybe = keyval.partition("=")
+                payload = tok[2:]
+                key, eq, inline_value = payload.partition("=")
+                negated = False
+                if self.allow_negative_bool_forms and key.startswith("no-") and key[3:] in name_index:
+                    key = key[3:]
+                    negated = True
+                    eq = ""
+                    inline_value = ""
 
-                if key not in name_index:
-                    raise ArgumentParsingError(f"Unknown argument: --{key}", i)
-                a = name_index[key]
+                arg = name_index.get(key)
+                if arg is None:
+                    if self.unknown_as_positional:
+                        # fall through into positional parsing
+                        pass
+                    else:
+                        raise ArgumentParsingError(f"Unknown argument: --{key}", idx=i, endpoint_path=endpoint_path)
+                else:
+                    if self.enforce_positional_only and arg.positional_only:
+                        raise ArgumentParsingError(
+                            f"Argument '{arg.name}' is positional-only and cannot be used as an option",
+                            idx=i,
+                            endpoint_path=endpoint_path,
+                        )
+                    if eq and not self.allow_long_equals:
+                        raise ArgumentParsingError(
+                            f"Inline long assignment '--{key}=...' is disabled",
+                            idx=i,
+                            endpoint_path=endpoint_path,
+                        )
 
-                if a.type is bool:
-                    v = True if not eq else self._coerce_from_type(maybe, a)
-                    self._validate_choices(v, a)
-                    merge_value(a, v)
-                    i += 1
+                    if self._is_bool_type(arg.type):
+                        if negated:
+                            value = False
+                            next_i = i + 1
+                        elif eq:
+                            value = self._coerce_value(inline_value, arg)
+                            next_i = i + 1
+                        else:
+                            value = True
+                            next_i = i + 1
+                    else:
+                        if negated:
+                            raise ArgumentParsingError(
+                                f"'--no-{key}' is only valid for boolean options",
+                                idx=i,
+                                endpoint_path=endpoint_path,
+                            )
+                        if eq:
+                            value = self._coerce_value(inline_value, arg)
+                            next_i = i + 1
+                        else:
+                            value, next_i = self._consume_values(
+                                args, i + 1, arg, name_index, options_mode=True, option_token_idx=i
+                            )
+
+                    value = self._finalize_value(arg, value)
+                    self._merge_value(parsed, arg, value)
+                    i = next_i
                     continue
 
-                # needs a value
-                if eq:
-                    raw = maybe
-                else:
-                    if i + 1 >= len(args):
-                        raise ArgumentParsingError(f"No value provided for '--{key}'", i)
-                    i += 1
-                    raw = args[i]
-
-                v = self._coerce_from_type(raw, a)
-                self._validate_choices(v, a)
-                merge_value(a, v)
-                i += 1
-                continue
-
-            # short option(s)
-            if options_mode and tok.startswith("-") and tok != "-":
+            if options_mode and tok.startswith("-") and tok not in {"-", "--"}:
                 body = tok[1:]
-                short, eq, maybe = body.partition("=")
+                key, eq, inline_value = body.partition("=")
 
-                # combined bools: -abc
-                if len(short) > 1 and not eq:
-                    all_bool = all(ch in name_index and name_index[ch].type is bool for ch in short)
-                    if all_bool:
-                        for ch in short:
+                if eq and not self.allow_short_equals:
+                    raise ArgumentParsingError(
+                        f"Inline short assignment '-{key}=...' is disabled",
+                        idx=i,
+                        endpoint_path=endpoint_path,
+                    )
+
+                if len(key) > 1 and not eq and self.allow_combined_short:
+                    if all((ch in name_index and self._is_bool_type(name_index[ch].type)) for ch in key):
+                        for ch in key:
                             a = name_index[ch]
-                            self._validate_choices(True, a)
-                            merge_value(a, True)
+                            if self.enforce_positional_only and a.positional_only:
+                                raise ArgumentParsingError(
+                                    f"Argument '{a.name}' is positional-only and cannot be used as an option",
+                                    idx=i,
+                                    endpoint_path=endpoint_path,
+                                )
+                            value = self._finalize_value(a, True)
+                            self._merge_value(parsed, a, value)
                         i += 1
                         continue
 
-                if short not in name_index:
-                    raise ArgumentParsingError(f"Unknown argument: -{short}", i)
-                a = name_index[short]
+                inline_attached = ""
+                if not eq and len(key) > 1 and self.allow_inline_short_value:
+                    candidate_key = key[0]
+                    if candidate_key in name_index and not self._is_bool_type(name_index[candidate_key].type):
+                        inline_attached = key[1:]
+                        key = candidate_key
 
-                if a.type is bool:
-                    v = True if not eq else self._coerce_from_type(maybe, a)
-                    self._validate_choices(v, a)
-                    merge_value(a, v)
-                    i += 1
+                arg = name_index.get(key)
+                if arg is None:
+                    if self.unknown_as_positional:
+                        # fall through into positional parsing
+                        pass
+                    else:
+                        raise ArgumentParsingError(f"Unknown argument: -{key}", idx=i, endpoint_path=endpoint_path)
+                else:
+                    if self.enforce_positional_only and arg.positional_only:
+                        raise ArgumentParsingError(
+                            f"Argument '{arg.name}' is positional-only and cannot be used as an option",
+                            idx=i,
+                            endpoint_path=endpoint_path,
+                        )
+                    if self._is_bool_type(arg.type):
+                        value = True if not eq else self._coerce_value(inline_value, arg)
+                        next_i = i + 1
+                    else:
+                        if eq:
+                            value = self._coerce_value(inline_value, arg)
+                            next_i = i + 1
+                        elif inline_attached:
+                            value = self._coerce_value(inline_attached, arg)
+                            next_i = i + 1
+                        else:
+                            value, next_i = self._consume_values(
+                                args, i + 1, arg, name_index, options_mode=True, option_token_idx=i
+                            )
+                    value = self._finalize_value(arg, value)
+                    self._merge_value(parsed, arg, value)
+                    i = next_i
                     continue
 
-                # needs a value
-                if eq:
-                    raw = maybe
-                else:
-                    if i + 1 >= len(args):
-                        raise ArgumentParsingError(f"No value provided for '-{short}'", i)
-                    i += 1
-                    raw = args[i]
-
-                v = self._coerce_from_type(raw, a)
-                self._validate_choices(v, a)
-                merge_value(a, v)
-                i += 1
-                continue
-
-            # positional token (or after `--`)
-            if pos_i >= len(positional):
-                raise ArgumentParsingError(f"Unexpected positional argument: {tok}", i)
-
-            # If interleaving is disabled, first positional ends option parsing (like many CLIs)
-            if options_mode and not self.interleaved:
+            if options_mode and not self.interleaved and tok and not tok.startswith("-"):
                 options_mode = False
 
-            a = positional[pos_i]
-            pos_i += 1
-            v = self._coerce_from_type(tok, a)
-            self._validate_choices(v, a)
-            merge_value(a, v)
-            i += 1
+            if positional_idx >= len(positional_args):
+                raise ArgumentParsingError(
+                    f"Unexpected positional argument: {tok}",
+                    idx=i,
+                    endpoint_path=endpoint_path,
+                )
+
+            parg = positional_args[positional_idx]
+            positional_idx += 1
+            if self.enforce_kwarg_only and parg.kwarg_only:
+                raise ArgumentParsingError(
+                    f"Argument '{parg.name}' is keyword-only and cannot be used positionally",
+                    idx=i,
+                    endpoint_path=endpoint_path,
+                )
+
+            value, next_i = self._consume_values(
+                args, i, parg, name_index, options_mode=options_mode, option_token_idx=i
+            )
+            value = self._finalize_value(parg, value)
+            self._merge_value(parsed, parg, value)
+            i = next_i
 
         self._apply_defaults_and_required(parsed, arguments)
         return list(), parsed
