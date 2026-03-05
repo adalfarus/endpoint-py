@@ -3,10 +3,10 @@ name: Publish Markdown Docs to Wiki
 on:
   pull_request:
     branches: [main]
-    paths: ['src/**', 'docs/**']
+    paths: ['src/**', 'docs/**', '.github/workflows/**']
   push:
     branches: [main]
-    paths: ['src/**', 'docs/**']
+    paths: ['src/**', 'docs/**', '.github/workflows/**']
   workflow_dispatch:
 
 permissions:
