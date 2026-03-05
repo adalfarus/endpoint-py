@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 from typing import Any, Callable, ForwardRef, Literal
 
 import pytest
@@ -62,7 +64,11 @@ def test_parse_mode_overloads_still_exposed_as_single_endpoint() -> None:
 
 def test_pretty_type_and_break_type_basic_shapes() -> None:
     assert pretty_type(int) == "int"
-    assert pretty_type(list[int]) == "list[int]"
+
+    if sys.version_info > (3, 10):
+        assert pretty_type(list[int]) == "list[int]"
+    else:
+        assert pretty_type(list[int]) == "list"
 
     fwd = break_type(ForwardRef("Node"))
     assert fwd.base_type == "Node"
