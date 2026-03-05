@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing_extensions import Unpack
 
 from dataclasses import dataclass, field
 from typing import (
@@ -178,9 +179,9 @@ def wrap_with_prefix(
 def tuple_pack_unpack(
     head: T,
     /,
-    *items: Unpack[tuple[*Ts]],
-    tail: tuple[*Ts],
-) -> tuple[T, *Ts, *Ts]:
+    *items: Unpack[tuple[Unpack[Ts]]],
+    tail: tuple[Unpack[Ts]],
+) -> tuple[T, Unpack[Ts], Unpack[Ts]]:
     """
     Uses TypeVarTuple + Unpack.
 
