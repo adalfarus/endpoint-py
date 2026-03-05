@@ -10,8 +10,8 @@ import shutil
 # Internal imports
 from .str_guess import guess_letters, guess_prefix_shortforms, guess_shortforms
 from .functional import break_type, Analysis, get_analysis, NoDefault
-from .native_parser import NativeParser, ArgumentParsingError, Argument, Parser, NArgsMode, NArgsSpec
-from .parser_collection import LightParser, FastParser, TokenStreamParser, ArgparseParser, StrictDFAParser, TinyParser
+from .native_parser import (NativeParser, ArgumentParsingError, Argument, Parser, NArgsMode, NArgsSpec,
+                            NArgsModeNumber, NArgsOneOrMore, NArgsZeroOrMore, NArgsMinMax)
 
 # Standard typing imports for aps
 import typing_extensions as _te
@@ -36,7 +36,6 @@ class EndpointError(Exception):
         super().__init__(message)
 
 
-#@_ty.runtime_checkable (_ty.Protocol)
 class EndpointProtocol(metaclass=abc.ABCMeta):
     """Abstract interface implemented by endpoint parser backends."""
 
@@ -99,12 +98,12 @@ class EndpointProtocol(metaclass=abc.ABCMeta):
 
 
 NARGS_TYPE = (NArgsMode
-              | NArgsMode.ONE_OR_MORE
-              | NArgsMode.ZERO_OR_MORE
-              | type[NArgsMode.ONE_OR_MORE]
-              | type[NArgsMode.ZERO_OR_MORE]
-              | NArgsMode.NUMBER
-              | NArgsMode.MIN_MAX)
+              | NArgsOneOrMore
+              | NArgsZeroOrMore
+              | type[NArgsOneOrMore]
+              | type[NArgsZeroOrMore]
+              | NArgsModeNumber
+              | NArgsMinMax)
 D = _ty.TypeVar("D")
 class ArgumentChanges(_ty.TypedDict, total=False):
     """Valid field updates accepted by :meth:`NativeEndpoint.change_argument`."""
@@ -261,13 +260,13 @@ class NativeEndpoint(EndpointProtocol):
             nargs = NArgsMode.MIN_MAX(0, 1)
         elif nargs == NArgsMode.ONE_OR_MORE:
             nargs = NArgsMode.MIN_MAX(1, None)
-        elif isinstance(nargs, NArgsMode.ONE_OR_MORE):
+        elif isinstance(nargs, NArgsOneOrMore):
             nargs = NArgsMode.MIN_MAX(1, None, nargs.spec)
         elif nargs == NArgsMode.ZERO_OR_MORE:
             nargs = NArgsMode.MIN_MAX(0, None)
-        elif isinstance(nargs, NArgsMode.ZERO_OR_MORE):
+        elif isinstance(nargs, NArgsZeroOrMore):
             nargs = NArgsMode.MIN_MAX(0, None, nargs.spec)
-        elif isinstance(nargs, NArgsMode.NUMBER):
+        elif isinstance(nargs, NArgsModeNumber):
             nargs = NArgsMode.MIN_MAX(nargs.n, nargs.n)
         if nargs.spec == NArgsSpec.FEW:
             nargs.spec = NArgsSpec.NUMBER(nargs.min)

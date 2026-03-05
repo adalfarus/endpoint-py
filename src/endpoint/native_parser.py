@@ -65,6 +65,16 @@ class Parser(metaclass=abc.ABCMeta):
         ...
 
 
+class NArgsSpecNumber:
+    """Numeric nargs preference wrapper."""
+
+    def __init__(self, n: int | None) -> None:
+        """Initialize numeric preference.
+
+        :param n: Preferred number of values, or ``None`` when unconstrained.
+        :return: None.
+        """
+        self.n: int | None = n
 class NArgsSpec(enum.Enum):
     """Qualitative argument-count specifier.
 
@@ -73,82 +83,83 @@ class NArgsSpec(enum.Enum):
     """
     FEW = 1
     MANY = 2
-    @enum.member
-    class NUMBER:
-        """Numeric nargs preference wrapper."""
-        def __init__(self, n: int | None) -> None:
-            """Initialize numeric preference.
+    @staticmethod
+    def NUMBER(n: int | None) -> NArgsSpecNumber:
+        return NArgsSpecNumber(n)
+class NArgsOneOrMore:
+    """Marker for one-or-more values."""
+    def __init__(self, spec: NArgsSpec | NArgsSpecNumber):
+        """Initialize one-or-more spec.
 
-            :param n: Preferred number of values, or ``None`` when unconstrained.
-            :return: None.
-            """
-            self.n: int | None = n
+        :param spec: Strategy used when value count can vary.
+        :return: None.
+        """
+        self.spec: NArgsSpec | NArgsSpecNumber = spec
+class NArgsZeroOrMore:
+    """Marker for zero-or-more values."""
+    def __init__(self, spec: NArgsSpec | NArgsSpecNumber):
+        """Initialize zero-or-more spec.
+
+        :param spec: Strategy used when value count can vary.
+        :return: None.
+        """
+        self.spec: NArgsSpec | NArgsSpecNumber = spec
+class NArgsModeNumber:
+    """Exact number-of-values wrapper."""
+    def __init__(self, n: int) -> None:
+        """Initialize exact nargs count.
+
+        :param n: Required number of consumed values.
+        :return: None.
+        """
+        self.n: int = n
+class NArgsMinMax:
+    """Explicit ``min``/``max`` bounds for value counts."""
+    def __init__(self, min_: int, max_: int | None, spec: NArgsSpec | NArgsSpecNumber = NArgsSpec.FEW) -> None:
+        """Initialize lower/upper nargs bounds.
+
+        :param min_: Minimum allowed number of consumed values.
+        :param max_: Maximum allowed number of consumed values, or ``None``.
+        :param spec: Preference hint used by parsers when ambiguous.
+        :return: None.
+        """
+        if min_ < 0 or (max_ and max_ < 0):
+            raise ValueError("Min and max both need to be >= 0")
+        self.min: int = min_
+        self.max: int | None = max_
+        self.spec: NArgsSpec | NArgsSpecNumber = spec
+    def is_lower_max(self, x: int) -> bool:
+        """Return whether ``x`` is still below the configured maximum.
+
+        :param x: Current consumed value count.
+        :return: ``True`` if another value may still be consumed.
+        """
+        if self.max is None:
+            return True
+        return x < self.max
+    def is_higher_min(self, x: int) -> bool:
+        """Return whether ``x`` is above the configured minimum.
+
+        :param x: Current consumed value count.
+        :return: ``True`` if minimum constraints are satisfied.
+        """
+        return x > self.min
 class NArgsMode(enum.Enum):
     """Nargs mode definitions used by endpoint arguments."""
     ONE = 1
     ZERO_OR_ONE = 2
-    @enum.member
-    class ONE_OR_MORE:
-        """Marker for one-or-more values."""
-        def __init__(self, spec: NArgsSpec | NArgsSpec.NUMBER):
-            """Initialize one-or-more spec.
-
-            :param spec: Strategy used when value count can vary.
-            :return: None.
-            """
-            self.spec: NArgsSpec | NArgsSpec.NUMBER = spec
-    @enum.member
-    class ZERO_OR_MORE:
-        """Marker for zero-or-more values."""
-        def __init__(self, spec: NArgsSpec | NArgsSpec.NUMBER):
-            """Initialize zero-or-more spec.
-
-            :param spec: Strategy used when value count can vary.
-            :return: None.
-            """
-            self.spec: NArgsSpec | NArgsSpec.NUMBER = spec
-    @enum.member
-    class NUMBER:
-        """Exact number-of-values wrapper."""
-        def __init__(self, n: int) -> None:
-            """Initialize exact nargs count.
-
-            :param n: Required number of consumed values.
-            :return: None.
-            """
-            self.n: int = n
-    @enum.member
-    class MIN_MAX:
-        """Explicit ``min``/``max`` bounds for value counts."""
-        def __init__(self, min_: int, max_: int | None, spec: NArgsSpec | NArgsSpec.NUMBER = NArgsSpec.FEW) -> None:
-            """Initialize lower/upper nargs bounds.
-
-            :param min_: Minimum allowed number of consumed values.
-            :param max_: Maximum allowed number of consumed values, or ``None``.
-            :param spec: Preference hint used by parsers when ambiguous.
-            :return: None.
-            """
-            if min_ < 0 or (max_ and max_ < 0):
-                raise ValueError("Min and max both need to be >= 0")
-            self.min: int = min_
-            self.max: int | None = max_
-            self.spec: NArgsSpec | NArgsSpec.NUMBER = spec
-        def is_lower_max(self, x: int) -> bool:
-            """Return whether ``x`` is still below the configured maximum.
-
-            :param x: Current consumed value count.
-            :return: ``True`` if another value may still be consumed.
-            """
-            if self.max is None:
-                return True
-            return x < self.max
-        def is_higher_min(self, x: int) -> bool:
-            """Return whether ``x`` is above the configured minimum.
-
-            :param x: Current consumed value count.
-            :return: ``True`` if minimum constraints are satisfied.
-            """
-            return x > self.min
+    @staticmethod
+    def ONE_OR_MORE(spec: NArgsSpec | NArgsSpecNumber) -> NArgsOneOrMore:
+        return NArgsOneOrMore(spec)
+    @staticmethod
+    def ZERO_OR_MORE(spec: NArgsSpec | NArgsSpecNumber) -> NArgsZeroOrMore:
+        return NArgsZeroOrMore(spec)
+    @staticmethod
+    def NUMBER(n: int) -> NArgsModeNumber:
+        return NArgsModeNumber(n)
+    @staticmethod
+    def MIN_MAX(min_: int, max_: int, spec: NArgsSpec | NArgsSpecNumber = NArgsSpec.FEW) -> NArgsMinMax:
+        return NArgsMinMax(min_, max_, spec)
 C = _ty.TypeVar("C")
 @dataclass
 class Argument:
