@@ -4,9 +4,9 @@
 [![PyPI Downloads](https://static.pepy.tech/badge/endpoint)](https://pepy.tech/projects/endpoint)
 ![coverage](https://raw.githubusercontent.com/Adalfarus/endpoint/refs/heads/main/coverage-badge.svg)
 
-# endpoint
+# end.
 
-endpoint is a small timer utility that has all the helpful features you could ever want.
+endpoint is a refined, full scale solution to CLIs .
 
 ## Compatibility
 🟩 (Works perfectly); 🟨 (Untested); 🟧 (Some Issues); 🟥 (Unusable)
@@ -30,18 +30,18 @@ endpoint is a small timer utility that has all the helpful features you could ev
 You can install endpoint via pip:
 
 ```sh
-pip install endpoint --pre --upgrade
+pip install endpoint.cli --pre --upgrade
 ```
 
 Or clone the repository and install manually:
 
 ```sh
-git clone https://github.com/Adalfarus/endpoint.git
-cd endpoint
+git clone https://github.com/Adalfarus/endpoint-py.git
+cd endpoint.py
 python -m pip install .
 ```
 
-If you have problems with the package please use `py -m pip install endpoint[dev] --pre --upgrade --user`
+If you have problems with the package please use `py -m pip install endpoint.cli[dev] --pre --upgrade --user`
 
 ## 📦 Usage
 
@@ -86,3 +86,4 @@ chmod +x ./aps_build_master.sh
 ## License
 
 endpoint is licensed under the LGPL-2.1 License - see the [LICENSE](https://github.com/adalfarus/endpoint/blob/main/LICENSE) file for details.
+
