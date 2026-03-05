@@ -166,6 +166,7 @@ def _parse_command_path_escaped(command_path: str, separator: str = "::") -> lis
                 current_segment_buffer = ""
                 separator_i = 0
         else:
+            current_segment_buffer += separator[:separator_i]
             current_segment_buffer += x
             separator_i = 0
     if separator_i != 0:
@@ -186,25 +187,27 @@ def add_command_to_structure(command_path: str, help_: str | None, endpoint: End
 
     current_level: _Node = structure[structure.keys()[0]]  # Skip base node
     for ix in path:
-        if ix in current_level:
-            current_level = current_level[ix]
-            continue
-        elif create_path:
-            if ix != path[-1]:
+        if ix != path[-1]:
+            if ix in current_level:
+                current_level = current_level[ix]
+                continue
+            elif create_path:
                 current_level[ix] = _Node()
                 current_level = current_level[ix]
             else:
-                if not current_level[ix]:
-                    current_level[ix] = _Node()
-                if current_level[ix].get_content() and not replace_endpoint:
-                    raise StructureError(f"Path '{command_path}' already has an Endpoint.")
-                if help_ is None and endpoint is not None:
-                    help_ = endpoint.get_help_str()
-                if help_ is not None:
-                    current_level[ix].set_help(help_)
-                current_level[ix].set_content(endpoint)
+                raise StructureError(f"Path '{command_path}' not found. Failed at part '{ix}'.")
         else:
-            raise StructureError(f"Path '{command_path}' not found. Failed at part '{ix}'.")
+            if not current_level[ix]:
+                if not create_path:
+                    raise StructureError(f"Path '{command_path}' not found. Failed at part '{ix}'.")
+                current_level[ix] = _Node()
+            if current_level[ix].get_content() is not None and not replace_endpoint:
+                raise StructureError(f"Path '{command_path}' already has an Endpoint.")
+            if help_ is None and endpoint is not None:
+                help_ = endpoint.get_help_str()
+            if help_ is not None:
+                current_level[ix].set_help(help_)
+            current_level[ix].set_content(endpoint)
     structure.update()
     return structure
 

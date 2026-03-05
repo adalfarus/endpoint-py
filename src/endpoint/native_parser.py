@@ -1354,7 +1354,7 @@ class NativeParser(Parser):
 
                 if parsed is _SENTINEL:  # Parsing failed completely
                     value_errors.append(
-                        ValueParsingError("The value of an argument could not be parsed to it's type.", arg,
+                        ValueParsingError(f"The value {wanted_posargs + parsed_strings} of an argument could not be parsed to it's type.", arg,
                                           caught_parsing_errors, severity))
                     continue
 

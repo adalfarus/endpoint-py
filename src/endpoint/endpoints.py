@@ -613,7 +613,7 @@ class ArgparseEndpoint(EndpointProtocol):
 
         ns = self._parser.parse_args(argv)
 
-        for argument_name, argument_default in self._argument_defaults:
+        for argument_name, argument_default in self._argument_defaults.items():
             if not hasattr(ns, argument_name):
                 setattr(ns, argument_name, argument_default)
 

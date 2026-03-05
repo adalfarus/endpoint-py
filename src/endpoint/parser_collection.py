@@ -1,8 +1,7 @@
-import abc
-
-from dataclasses import dataclass
+from dataclasses import dataclass, replace as dc_replace
 import warnings
 import argparse
+import abc
 import ast
 
 # Internal import
@@ -91,7 +90,7 @@ class Type1Parser(Parser, metaclass=abc.ABCMeta):
             for c in choices:
                 try:
                     if isinstance(c, bool):
-                        return cls._coerce_from_type(value, dataclasses.replace(arg, type=bool))  # type: ignore[arg-type]
+                        return cls._coerce_from_type(value, dc_replace(arg, type=bool))  # type: ignore[arg-type]
                     return type(c)(value)
                 except Exception:
                     continue
@@ -107,7 +106,7 @@ class Type1Parser(Parser, metaclass=abc.ABCMeta):
                     continue
                 try:
                     # recurse with a lightweight "shadow arg"
-                    shadow = dataclasses.replace(arg, type=option_t)  # type: ignore[arg-type]
+                    shadow = dc_replace(arg, type=option_t)  # type: ignore[arg-type]
                     return cls._coerce_from_type(value, shadow)
                 except Exception as e:
                     last_err = e
@@ -132,12 +131,12 @@ class Type1Parser(Parser, metaclass=abc.ABCMeta):
                     )
                 out = []
                 for p, et in zip(parts, elem_t, strict=True):
-                    shadow = dataclasses.replace(arg, type=et)  # type: ignore[arg-type]
+                    shadow = dc_replace(arg, type=et)  # type: ignore[arg-type]
                     out.append(cls._coerce_from_type(p, shadow))
                 return tuple(out)
             else:
                 # list[T]/set[T]/tuple[T,...]
-                shadow_elem = dataclasses.replace(arg, type=elem_t)  # type: ignore[arg-type]
+                shadow_elem = dc_replace(arg, type=elem_t)  # type: ignore[arg-type]
                 coerced = [cls._coerce_from_type(p, shadow_elem) for p in parts]
                 return origin(coerced)  # type: ignore[misc]
 

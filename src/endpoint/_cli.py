@@ -69,7 +69,7 @@ def _cli():
                     "-s",
                     "-q",
                     "--tb=short",
-                    "--maxfail=1",
+                    #"--maxfail=1",
                     "-p",
                     "no:warnings",
                 ]

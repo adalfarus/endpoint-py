@@ -342,7 +342,7 @@ def analyze_function(function: _a.Callable, /, break_types: bool = True, guess_t
     kwdefaults: dict[str, _ty.Any] = function.__kwdefaults__ or ()
     len_defaults: int = len(defaults) + len(kwdefaults)
     len_no_defaults: int = arg_count - len_defaults
-    types = function.__annotations__ or {}
+    types = _ty.get_type_hints(function) or {}  # Cannot use __annotations__ here as they are just strings if types were deferred with 'from __future__ import annotations'
     docstring = function.__doc__ or ""
     type_hints = _ty.get_type_hints(function)
 

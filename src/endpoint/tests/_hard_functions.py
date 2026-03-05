@@ -307,13 +307,3 @@ def request_handler(
     if extra is not None:
         out["extra_val"] = extra["k"]  # structural __getitem__
     return out
-
-
-from src.endpoint.endpoints import NativeEndpoint
-
-for func in (signature_stress, recursive_tree_op, wrap_with_prefix, tuple_pack_unpack, parse_mode, is_decimal_string,
-             default_weirdness, async_stress, request_handler):
-    ep = NativeEndpoint.from_function(func, "")
-    print(ep._help_str)
-    for arg in ep._arguments:
-        print(arg)
