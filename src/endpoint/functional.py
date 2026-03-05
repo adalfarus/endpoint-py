@@ -59,7 +59,7 @@ class BrokenType:
     """
 
     base_type: _ty.Any
-    arguments: tuple[_ty.Self, ...]
+    arguments: tuple[_te.Self, ...]
 
     def __str__(self) -> str:
         """Return a readable recursive representation.

@@ -30,7 +30,7 @@ class StructureError(Exception):
 class _Node:
     """Internal tree node used to represent command-path hierarchy."""
 
-    def __init__(self, parent: _ty.Self | None = None, name: str | None = None, help_: str | None = None) -> None:
+    def __init__(self, parent: _te.Self | None = None, name: str | None = None, help_: str | None = None) -> None:
         """Initialize node metadata and children map.
 
         :param parent: Parent node, or ``None`` for root.
@@ -38,11 +38,11 @@ class _Node:
         :param help_: Optional help text associated with this node.
         :return: None.
         """
-        self._parent: _ty.Self | None = parent
+        self._parent: _te.Self | None = parent
         self._name: str | None = name
         self._help: str | None = help_
         self._content: EndpointProtocol | None = None
-        self._children: dict[str, _ty.Self] = dict()
+        self._children: dict[str, _te.Self] = dict()
 
     def get_name(self) -> str | None:
         """Return node name.
@@ -59,14 +59,14 @@ class _Node:
         """
         self._name = name
 
-    def get_parent(self) -> _ty.Self | None:
+    def get_parent(self) -> _te.Self | None:
         """Return parent node.
 
         :return: Parent node or ``None``.
         """
         return self._parent
 
-    def set_parent(self, parent: _ty.Self | None):
+    def set_parent(self, parent: _te.Self | None):
         """Set parent node.
 
         :param parent: New parent node.
@@ -104,7 +104,7 @@ class _Node:
         """
         self._content = content
 
-    def get_available_paths(self, base: str | None = None, *, separator: str = " -> ") -> list[tuple[str, _ty.Self]]:
+    def get_available_paths(self, base: str | None = None, *, separator: str = " -> ") -> list[tuple[str, _te.Self]]:
         """Collect reachable path strings and terminal nodes.
 
         :param base: Existing prefix while recursing.
@@ -118,7 +118,7 @@ class _Node:
             base = self._name
         else:
             base += separator + self._name
-        rest: list[tuple[str, _ty.Self]] = reduce(lambda x, y: x + y, [c.get_available_paths(base, separator=separator) for c in self._children.values()], [])
+        rest: list[tuple[str, _te.Self]] = reduce(lambda x, y: x + y, [c.get_available_paths(base, separator=separator) for c in self._children.values()], [])
         if self._help is not None:
             return [(base, self)] + rest
         return rest
@@ -137,11 +137,11 @@ class _Node:
         """Return child-key list."""
         return list(self._children.keys())
 
-    def values(self) -> list[_ty.Self]:
+    def values(self) -> list[_te.Self]:
         """Return child-node list."""
         return list(self._children.values())
 
-    def __getitem__(self, item: str) -> _ty.Self | None:
+    def __getitem__(self, item: str) -> _te.Self | None:
         """Get child by key.
 
         :param item: Child key.
@@ -149,7 +149,7 @@ class _Node:
         """
         return self._children.get(item)
 
-    def __setitem__(self, key: str, value: _ty.Self):
+    def __setitem__(self, key: str, value: _te.Self):
         """Set child node under key.
 
         :param key: Child key.

@@ -354,7 +354,7 @@ class ArgumentParsingError(Exception):
         self.severity: ParsingErrorSeverity = severity
         self.stream: "TokenStream | None" = stream
 
-    def raise_(self) -> _ty.Self:
+    def raise_(self) -> _te.Self:
         """Raise immediately for fatal severities.
 
         :return: ``self`` when non-fatal.
@@ -457,7 +457,7 @@ class TokenStream:
         """Reset stream cursor to start."""
         self._index = 0
 
-    def copy(self) -> _ty.Self:
+    def copy(self) -> _te.Self:
         """Create shallow copy preserving current index.
 
         :return: Copied token stream.

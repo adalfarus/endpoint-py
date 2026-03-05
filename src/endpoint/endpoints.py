@@ -537,7 +537,7 @@ class NativeEndpoint(EndpointProtocol):
     @classmethod
     def from_function(cls, function: _a.Callable, name: str, help_str: str = "", snakecase_replacement: str = "-", *,
                       generate_shortforms_and_letters: bool = True, calling_func: CallingFunc | None = None,
-                      parser: Parser | None = None) -> _ty.Self:
+                      parser: Parser | None = None) -> _te.Self:
         """Create an endpoint by analyzing a callable signature.
 
         :param function: Source callable used to generate arguments.
