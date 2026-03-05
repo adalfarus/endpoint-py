@@ -271,10 +271,9 @@ def test_native_union_and_iterable_fragment_edge_paths() -> None:
     assert isinstance(err, ArgumentParsingError)
 
 
-def test_native_parser_list_known_flags_and_explain_not_implemented() -> None:
+def test_native_parser_list_known_flags_and_explain_flags() -> None:
     parser = NativeParser({})
     flags = parser.list_known_flags()
     assert "ERROR_IF_TOO_MANY_KWARGS" in flags
     assert "STR_DELIMITERS" in flags
-    with pytest.raises(NotImplementedError):
-        parser.explain_flag("STR_DELIMITERS")
+    parser.explain_flag("STR_DELIMITERS")

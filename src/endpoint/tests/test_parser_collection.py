@@ -119,16 +119,13 @@ def test_argument_parsing_error_str_and_parser_flag_introspection() -> None:
     assert TinyParser({}).list_known_flags() == {}
 
 
-def test_explain_flag_methods_currently_not_implemented_or_empty() -> None:
-    with pytest.raises(NotImplementedError):
-        LightParser({}).explain_flag("x")
-    with pytest.raises(NotImplementedError):
-        TokenStreamParser({}).explain_flag("x")
-    with pytest.raises(NotImplementedError):
-        StrictDFAParser({}).explain_flag("x")
-    with pytest.raises(NotImplementedError):
-        FastParser({}).explain_flag("x")
-    assert TinyParser({}).explain_flag("x") == ""
+def test_explain_flag_methods_and_explain_flags_methods() -> None:
+    LightParser({}).explain_flag("smart_typing")
+    TokenStreamParser({}).explain_flag("repeatable_collections")
+    StrictDFAParser({}).explain_flag("DFA_ASSIGN_TOKENS")
+    FastParser({}).explain_flag("FAST_ASSIGN_CHAR")
+    with pytest.raises(ValueError):
+        TinyParser({}).explain_flag("x")
 
 
 def test_type1_coerce_from_type_literal_union_and_tuple_arity() -> None:
