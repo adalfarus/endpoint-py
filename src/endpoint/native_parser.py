@@ -1323,7 +1323,7 @@ class NativeParser(Parser):
 
             last_n: int = 0
             for arg in arguments:
-                parsed_strings: list[str] = kwarg_values.pop(arg.metavar)
+                parsed_strings: list[str] = kwarg_values.pop(arg.metavar, [])
                 wanted_n: int = trying_numbers[arg][1]
                 wanted_posargs: list[str] = posarg_values[last_n:last_n+wanted_n]
                 last_n += wanted_n
@@ -1395,7 +1395,7 @@ class NativeParser(Parser):
                     #   => If at the end positionals remain, we try to adjust our "how many args for this one" assumptions.
                     #   => If not possible we exit the loop and declare this a success.
                     raise NotImplementedError(f"Non deterministic nargs are not set to allowed.")
-                parsed_strings: list[str] = kwarg_values.pop(arg.metavar)
+                parsed_strings: list[str] = kwarg_values.pop(arg.metavar, [])
 
                 if parsed_strings:
                     severity: ValueParsingSeverity = ValueParsingSeverity.REQUIRED_ARG if arg.required else ValueParsingSeverity.NOT_REQUIRED_ARG
@@ -1474,7 +1474,7 @@ class NativeParser(Parser):
 
                     parsed_pos: _ty.Any = _SENTINEL
                     for i in range(2):  # Have a max of 2 parsing rounds
-                        parsed_pos = _walk_value_type(arg.broken_type, parsed_strings,
+                        parsed_pos = _walk_value_type(arg.broken_type, gotten_posargs,
                                                            caught_parsing_errors, i == 1)
 
                         if parsed_pos is _SENTINEL:  # Argument parsed checker
