@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing_extensions import Unpack
+from typing_extensions import Unpack, Never
 
 from dataclasses import dataclass, field
 from typing import (
@@ -9,16 +9,10 @@ from typing import (
     ClassVar,
     Concatenate,
     Final,
-    Generic,
-    Iterable,
-    Iterator,
     Literal,
     Mapping,
-    MutableMapping,
-    Never,
     NewType,
     NotRequired,
-    Optional,
     ParamSpec,
     Protocol,
     Required,
@@ -28,8 +22,6 @@ from typing import (
     TypeGuard,
     TypeVar,
     TypeVarTuple,
-    Union,
-    Unpack,
     overload,
 )
 from collections.abc import Awaitable, Coroutine
