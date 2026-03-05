@@ -73,6 +73,7 @@ class NArgsSpec(enum.Enum):
     """
     FEW = 1
     MANY = 2
+    @enum.member
     class NUMBER:
         """Numeric nargs preference wrapper."""
         def __init__(self, n: int | None) -> None:
@@ -86,6 +87,7 @@ class NArgsMode(enum.Enum):
     """Nargs mode definitions used by endpoint arguments."""
     ONE = 1
     ZERO_OR_ONE = 2
+    @enum.member
     class ONE_OR_MORE:
         """Marker for one-or-more values."""
         def __init__(self, spec: NArgsSpec | NArgsSpec.NUMBER):
@@ -95,6 +97,7 @@ class NArgsMode(enum.Enum):
             :return: None.
             """
             self.spec: NArgsSpec | NArgsSpec.NUMBER = spec
+    @enum.member
     class ZERO_OR_MORE:
         """Marker for zero-or-more values."""
         def __init__(self, spec: NArgsSpec | NArgsSpec.NUMBER):
@@ -104,7 +107,7 @@ class NArgsMode(enum.Enum):
             :return: None.
             """
             self.spec: NArgsSpec | NArgsSpec.NUMBER = spec
-
+    @enum.member
     class NUMBER:
         """Exact number-of-values wrapper."""
         def __init__(self, n: int) -> None:
@@ -114,6 +117,7 @@ class NArgsMode(enum.Enum):
             :return: None.
             """
             self.n: int = n
+    @enum.member
     class MIN_MAX:
         """Explicit ``min``/``max`` bounds for value counts."""
         def __init__(self, min_: int, max_: int | None, spec: NArgsSpec | NArgsSpec.NUMBER = NArgsSpec.FEW) -> None:
