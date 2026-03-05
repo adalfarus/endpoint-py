@@ -85,5 +85,4 @@ chmod +x ./aps_build_master.sh
 
 ## License
 
-endpoint is licensed under the LGPL-2.1 License - see the [LICENSE](https://github.com/adalfarus/endpoint/blob/main/LICENSE) file for details.
-
+endpoint is licensed under the GPL-3.0 License - see the [LICENSE](https://github.com/adalfarus/endpoint/blob/main/LICENSE) file for details.
