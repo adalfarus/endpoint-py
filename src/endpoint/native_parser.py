@@ -1047,9 +1047,52 @@ class NativeParser(Parser):
                 flags_dict[flag_name] = _ty.get_type_hints(NativeParserEnabledFlags).get(flag_name) or type(k)
         return flags_dict
 
-    # TODO: Implement!
     def explain_flag(self, flag_name: str) -> str:
-        raise NotImplementedError()
+        explanations: dict[str, str] = {
+            "PARSER_FRAGMENTS": "Override or extend parser fragment classes used for value parsing.",
+            "NO_POSITIONAL_ARGS": "Disallow positional arguments entirely (currently not implemented).",
+            "SMART_TYPING": "Enable smart typing heuristics (currently not implemented).",
+            "ALLOW_NON_DETERMINISTIC_BEHAVIOUR": "Allow non-deterministic parsing branches.",
+            "ARGNAME_VALID": "Characters allowed in argument names.",
+            "ARG_ASSIGNMENT_TOKENS": "Characters accepted between argument names and values.",
+            "ERROR_IF_TOO_MANY_KWARGS": "Raise on unknown keyword-style arguments when enabled.",
+            "IGNORE_VALUE_PARSING_ERROR_BELOW": "Ignore value-parsing errors below this severity.",
+            "RETURN_ALL_POSONLY_AS_KWARG": "Return positional-only parsed values in kwargs.",
+            "PARSE_PYTHON_TYPES": "Global default for Python-literal-like parsing behavior.",
+            "STR_PARSE_PYTHON_TYPES": "Enable quoted-string unwrapping for string parsing.",
+            "STR_DELIMITERS": "Delimiter characters used for string parsing.",
+            "ITERABLE_PARSE_PYTHON_TYPES": "Enable bracket-aware iterable parsing.",
+            "ITERABLE_ERROR_IF_UNSURE": "Emit uncertainty errors for ambiguous iterable parsing.",
+            "ITERABLE_CONVERT_TO_TYPE": "Container type used for parsed iterable values.",
+            "ITERABLE_ASSIGNMENT_TOKENS": "Assignment-token set used while parsing iterable entries.",
+            "ITERABLE_BRACKETS": "Bracket pairs recognized for iterable literals.",
+            "LIST_PARSE_PYTHON_TYPES": "Enable bracket-aware list parsing.",
+            "LIST_ERROR_IF_UNSURE": "Emit uncertainty errors for ambiguous list parsing.",
+            "LIST_ASSIGNMENT_TOKENS": "Assignment-token set used while parsing list entries.",
+            "LIST_BRACKETS": "Bracket pairs recognized for list literals.",
+            "DICT_PARSE_PYTHON_TYPES": "Enable bracket-aware dict parsing.",
+            "DICT_LIST_SEPARATORS": "Separators used between dictionary items.",
+            "DICT_KV_SEPARATORS": "Separators used between dictionary keys and values.",
+            "DICT_IGNORE_RANDOM_SEPARATORS": "Ignore unexpected separators in dictionary parsing.",
+            "DICT_ALLOW_SAME_K_AND_V_SEPARATORS": "Allow the same separator token for pairs and key/value.",
+            "DICT_ASSIGNMENT_TOKENS": "Assignment-token set used while parsing dictionaries.",
+            "DICT_BRACKETS": "Bracket pairs recognized for dictionary literals.",
+            "SET_PARSE_PYTHON_TYPES": "Enable bracket-aware set parsing.",
+            "SET_ERROR_IF_UNSURE": "Emit uncertainty errors for ambiguous set parsing.",
+            "SET_ASSIGNMENT_TOKENS": "Assignment-token set used while parsing sets.",
+            "SET_BRACKETS": "Bracket pairs recognized for set literals.",
+            "TUPLE_PARSE_PYTHON_TYPES": "Enable bracket-aware tuple parsing.",
+            "TUPLE_ERROR_IF_UNSURE": "Emit uncertainty errors for ambiguous tuple parsing.",
+            "TUPLE_ASSIGNMENT_TOKENS": "Assignment-token set used while parsing tuples.",
+            "TUPLE_BRACKETS": "Bracket pairs recognized for tuple literals.",
+            "BYTES_ENCODING": "Encoding used to convert textual bytes input.",
+            "BOOL_TOGGLE_VALUE": "Toggle boolean values on repeated flag occurrences.",
+        }
+        key = flag_name.strip().upper()
+        known_flags = self.list_known_flags()
+        if key not in known_flags:
+            raise ValueError(f"Unknown flag '{flag_name}'. Known flags: {', '.join(sorted(known_flags))}")
+        return explanations.get(key, "No additional documentation is available for this flag.")
 
     # TODO: Easy to switch out ArgumentParsers and ArgumentValueParsers (For no_positional_args and similar)
     # TODO: Flag bool letters as letter strings vs arguments with one - and longer names

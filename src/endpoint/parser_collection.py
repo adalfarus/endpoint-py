@@ -159,9 +159,21 @@ class LightParser(Type1Parser):
             "allow_combined_short": bool,
         }
 
-    # TODO: Implement!
     def explain_flag(self, flag_name: str) -> str:
-        raise NotImplementedError()
+        explanations: dict[str, str] = {
+            "smart_typing": (
+                "Enable best-effort type coercion for option values. "
+                "When disabled, conversion behavior is stricter."
+            ),
+            "allow_combined_short": (
+                "Allow combined short boolean flags such as '-abc' "
+                "(equivalent to '-a -b -c')."
+            ),
+        }
+        key = flag_name.strip()
+        if key not in explanations:
+            raise ValueError(f"Unknown flag '{flag_name}'. Known flags: {', '.join(explanations)}")
+        return explanations[key]
 
     def parse_args(self, args: list[str], arguments: list[Argument], endpoint_path: str
                    ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
@@ -263,9 +275,20 @@ class TokenStreamParser(Type1Parser):
             "interleaved_positionals": bool,
         }
 
-    # TODO: Implement!
     def explain_flag(self, flag_name: str) -> str:
-        raise NotImplementedError()
+        explanations: dict[str, str] = {
+            "repeatable_collections": (
+                "Allow repeated assignments for collection arguments. "
+                "For example, '--tags=a --tags=b' merges into a single value."
+            ),
+            "interleaved_positionals": (
+                "Allow positional arguments to appear interleaved with options."
+            ),
+        }
+        key = flag_name.strip()
+        if key not in explanations:
+            raise ValueError(f"Unknown flag '{flag_name}'. Known flags: {', '.join(explanations)}")
+        return explanations[key]
 
     @staticmethod
     def _build_name_index(arguments: list[Argument]) -> dict[str, Argument]:
@@ -452,7 +475,17 @@ class ArgparseParser(Type1Parser):
 
     @_te.deprecated("ArgparseParser is deprecated. Please use ArgparseEndpoint instead.")
     def explain_flag(self, flag_name: str) -> str:
-        raise NotImplementedError()
+        warnings.warn("ArgparseParser is deprecated. Please use ArgparseEndpoint instead.", stacklevel=2)
+        explanations: dict[str, str] = {
+            "allow_abbrev": (
+                "Allow argparse long-option abbreviation. "
+                "If disabled, long option names must match exactly."
+            ),
+        }
+        key = flag_name.strip()
+        if key not in explanations:
+            raise ValueError(f"Unknown flag '{flag_name}'. Known flags: {', '.join(explanations)}")
+        return explanations[key]
 
     @staticmethod
     def _accepts_argument(parser_flags: dict[str, _ty.Any], endpoint_path: str, name: str) -> bool:
@@ -576,9 +609,20 @@ class StrictDFAParser(Parser):
     def list_known_flags(self) -> dict[str, type[_ty.Any]]:
         return dict(STRICT_DFA_FLAG_TYPES)
 
-    # TODO: Implement!
     def explain_flag(self, flag_name: str) -> str:
-        raise NotImplementedError()
+        explanations: dict[str, str] = {
+            "DFA_REQUIRE_INLINE_ASSIGNMENT": "Require inline '--k=v' assignment for valued options.",
+            "DFA_ASSIGN_TOKENS": "Characters recognized as assignment tokens when splitting key/value.",
+            "DFA_ALLOW_POSITIONALS": "Allow positional arguments in addition to options.",
+            "DFA_POSITIONALS_AFTER_OPTIONS": "Reject options after positional parsing has started.",
+            "DFA_TEXT_ENCODING": "Encoding used when converting text to bytes.",
+            "DFA_BOOL_PRESENT_VALUE": "Value assigned when a boolean flag is present.",
+            "DFA_BOOL_TOGGLE_IF_DEFAULT": "Toggle boolean defaults on presence when enabled.",
+        }
+        key = flag_name.strip()
+        if key not in explanations:
+            raise ValueError(f"Unknown flag '{flag_name}'. Known flags: {', '.join(explanations)}")
+        return explanations[key]
 
     def _split_assignment(self, s: str) -> tuple[str, str] | None:
         for t in self._assign_tokens:
@@ -783,9 +827,16 @@ class FastParser(Parser):
     def list_known_flags(self) -> dict[str, type[_ty.Any]]:
         return dict(FAST_FLAG_TYPES)
 
-    # TODO: Implement!
     def explain_flag(self, flag_name: str) -> str:
-        raise NotImplementedError()
+        explanations: dict[str, str] = {
+            "FAST_ALLOW_POSITIONALS": "Allow positional arguments.",
+            "FAST_ASSIGN_CHAR": "Single character used for inline option assignment.",
+            "FAST_BOOL_PRESENT": "Value assigned when a boolean flag is present.",
+        }
+        key = flag_name.strip()
+        if key not in explanations:
+            raise ValueError(f"Unknown flag '{flag_name}'. Known flags: {', '.join(explanations)}")
+        return explanations[key]
 
     def parse_args(
         self,
@@ -879,7 +930,7 @@ class TinyParser(Parser):
         return {}
 
     def explain_flag(self, flag_name: str) -> str:
-        return ""  # We do not have any flags
+        raise ValueError(f"TinyParser exposes no configurable flags. Received '{flag_name}'.")  # We do not have any flags
 
     def parse_args(self, args: list[str], arguments: list[Argument], endpoint_path: str
                    ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
