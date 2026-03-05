@@ -23,19 +23,39 @@ __all__ = ["ArgumentParsingError", "LightParser", "TokenStreamParser", "Argparse
 
 @dataclass
 class ArgumentParsingError(Exception):
+    """Parser-collection argument parsing error.
+
+    :param message: Human-readable error description.
+    :param idx: Optional token index where the error occurred.
+    :param endpoint_path: Optional endpoint identifier.
+    :return: None.
+    """
     message: str
     idx: int | None = None
     endpoint_path: str | None = None
 
     def __str__(self) -> str:
+        """Render compact diagnostic string.
+
+        :return: Error message with optional index and endpoint information.
+        """
         loc = f" (idx={self.idx})" if self.idx is not None else ""
         ep = f" [{self.endpoint_path}]" if self.endpoint_path else ""
         return f"{self.message}{loc}{ep}"
 
 
 class Type1Parser(Parser, metaclass=abc.ABCMeta):
+    """Shared parser base with conversion/default helpers."""
+
     @staticmethod
     def _validate_choices(value: _ty.Any, arg: Argument) -> None:
+        """Validate parsed value against configured ``choices``.
+
+        :param value: Parsed value.
+        :param arg: Argument metadata.
+        :return: None.
+        :raises ArgumentParsingError: If value is not in ``arg.choices``.
+        """
         if arg.choices:
             # arg.choices are typed values; compare directly
             if value not in arg.choices:
@@ -45,6 +65,13 @@ class Type1Parser(Parser, metaclass=abc.ABCMeta):
 
     @staticmethod
     def _apply_defaults_and_required(parsed: dict[str, _ty.Any], arguments: list[Argument]) -> None:
+        """Apply defaults and enforce required arguments.
+
+        :param parsed: Parsed output mapping to mutate.
+        :param arguments: Declared arguments.
+        :return: None.
+        :raises ArgumentParsingError: If a required argument is missing.
+        """
         for a in arguments:
             if a.name in parsed:
                 continue
@@ -55,14 +82,20 @@ class Type1Parser(Parser, metaclass=abc.ABCMeta):
 
     @classmethod
     def _coerce_from_type(cls, value: str, arg: Argument) -> _ty.Any:
-        """
-        Best-effort conversion based on Argument.type and (optionally) BrokenType.
-        Supports:
-          - bool (common true/false strings)
-          - list/tuple/set from comma-separated or repeated parsing (single token support here)
-          - typing.Literal
-          - typing.Optional / Union
-          - basic constructors (int, float, str, etc.)
+        """Best-effort conversion based on ``arg.type``.
+
+        Supported patterns include:
+
+        - boolean spellings (``true/false``, ``1/0``, etc.)
+        - ``typing.Literal`` values
+        - ``typing.Optional`` / ``typing.Union`` branches
+        - plain and parametrized collection types
+        - constructor-based scalar conversions (``int``, ``float``, ``str``, ...)
+
+        :param value: Raw string token value.
+        :param arg: Argument metadata containing target type.
+        :return: Coerced typed value.
+        :raises ArgumentParsingError: If coercion fails for all supported paths.
         """
         t = arg.type
 
@@ -148,18 +181,32 @@ class Type1Parser(Parser, metaclass=abc.ABCMeta):
 
 
 class LightParser(Type1Parser):
+    """Simple option/positional parser with lightweight coercion."""
+
     def __init__(self, enabled_flags: dict[str, _ty.Any]) -> None:
+        """Initialize parser flags.
+
+        :param enabled_flags: Runtime parser flags.
+        :return: None.
+        """
         self._enabled_flags = enabled_flags
         self.smart_typing: bool = enabled_flags.get("smart_typing", True)
         self.allow_combined_short: bool = enabled_flags.get("allow_combined_short", True)
 
     def list_known_flags(self) -> dict[str, type[_ty.Any]]:
+        """Return supported configuration flags."""
         return {
             "smart_typing": bool,
             "allow_combined_short": bool,
         }
 
     def explain_flag(self, flag_name: str) -> str:
+        """Explain one parser flag.
+
+        :param flag_name: Flag name.
+        :return: Description text.
+        :raises ValueError: If flag is unknown.
+        """
         explanations: dict[str, str] = {
             "smart_typing": (
                 "Enable best-effort type coercion for option values. "
@@ -177,6 +224,13 @@ class LightParser(Type1Parser):
 
     def parse_args(self, args: list[str], arguments: list[Argument], endpoint_path: str
                    ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+        """Parse tokens using long/short options and positionals.
+
+        :param args: Raw CLI tokens.
+        :param arguments: Declared argument metadata.
+        :param endpoint_path: Endpoint identifier for diagnostics.
+        :return: Parsed ``(positionals, kwargs)``.
+        """
         name_map = {a.name: a for a in arguments}
         for a in arguments:
             for alt in a.alternative_names:
@@ -251,31 +305,41 @@ class LightParser(Type1Parser):
 
 
 class TokenStreamParser(Type1Parser):
-    """
-    A streaming parser with a slightly different UX:
+    """Streaming parser supporting option/positional interleaving.
 
-    - Supports `--` end-of-options separator.
-    - Allows positional arguments *anywhere* (interleaved with options) as long as
-      they can still be assigned to the next positional parameter.
-    - Allows repeated occurrences of list/set/tuple params via multiple uses:
-        --tags=a --tags=b  => tags=['a','b']
-      (and also supports comma form: --tags=a,b)
+    Features include:
 
-    - For non-collection params, last value wins.
+    - ``--`` end-of-options separator support.
+    - Interleaved positionals and options when enabled.
+    - Repeated collection merging:
+      ``--tags=a --tags=b`` -> ``tags=['a', 'b']``.
+    - Last-value-wins behavior for non-collection parameters.
     """
 
     def __init__(self, enabled_flags: dict[str, _ty.Any]) -> None:
+        """Initialize stream parser flags.
+
+        :param enabled_flags: Runtime parser flags.
+        :return: None.
+        """
         self._enabled_flags = enabled_flags
         self.repeatable = enabled_flags.get("repeatable_collections", True)
         self.interleaved = enabled_flags.get("interleaved_positionals", True)
 
     def list_known_flags(self) -> dict[str, type[_ty.Any]]:
+        """Return supported configuration flags."""
         return {
             "repeatable_collections": bool,
             "interleaved_positionals": bool,
         }
 
     def explain_flag(self, flag_name: str) -> str:
+        """Explain one parser flag.
+
+        :param flag_name: Flag name.
+        :return: Description text.
+        :raises ValueError: If flag is unknown.
+        """
         explanations: dict[str, str] = {
             "repeatable_collections": (
                 "Allow repeated assignments for collection arguments. "
@@ -292,11 +356,10 @@ class TokenStreamParser(Type1Parser):
 
     @staticmethod
     def _build_name_index(arguments: list[Argument]) -> dict[str, Argument]:
-        """
-        Map every accepted key to its Argument:
-          - primary name
-          - alternative_names
-          - letter (short option)
+        """Build lookup table from accepted names to ``Argument``.
+
+        :param arguments: Declared arguments.
+        :return: Name-to-argument mapping.
         """
         idx: dict[str, Argument] = {}
         for a in arguments:
@@ -310,6 +373,13 @@ class TokenStreamParser(Type1Parser):
     def parse_args(
         self, args: list[str], arguments: list[Argument], endpoint_path: str
     ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+        """Parse tokens with streaming semantics.
+
+        :param args: Raw CLI tokens.
+        :param arguments: Declared argument metadata.
+        :param endpoint_path: Endpoint identifier for diagnostics.
+        :return: Parsed ``(positionals, kwargs)``.
+        """
         name_index = self._build_name_index(arguments)
 
         positional = [a for a in arguments if a.type is not bool]
@@ -452,22 +522,30 @@ class TokenStreamParser(Type1Parser):
 # TODO: Remove? Now we have a proper endpoint for it
 @_te.deprecated("ArgparseParser is deprecated. Please use ArgparseEndpoint instead.")
 class ArgparseParser(Type1Parser):
-    """
-    Uses stdlib argparse. Supports:
-      - --name value, --name=value
-      - short letters (Argument.letter) when provided
-      - choices (Argument.choices)
-      - required/default handling
-      - bool flags: store_true, plus optional explicit value via --flag=true/false
-        (explicit bool values supported by treating bools as optional-value flags)
+    """Compatibility parser backed by :mod:`argparse`.
+
+    .. deprecated:: ArgparseParser is deprecated. Use ``ArgparseEndpoint``.
+
+    Supported behavior includes:
+
+    - ``--name value`` and ``--name=value``
+    - short option letters when configured
+    - choices/default/required enforcement
+    - boolean presence flags with optional explicit values
     """
 
     def __init__(self, enabled_flags: dict[str, _ty.Any]) -> None:
+        """Initialize argparse-backed parser.
+
+        :param enabled_flags: Runtime parser flags.
+        :return: None.
+        """
         self._enabled_flags = enabled_flags
         self.allow_abbrev = enabled_flags.get("allow_abbrev", False)
 
     @_te.deprecated("ArgparseParser is deprecated. Please use ArgparseEndpoint instead.")
     def list_known_flags(self) -> dict[str, type[_ty.Any]]:
+        """Return supported configuration flags."""
         warnings.warn("ArgparseParser is deprecated. Please use ArgparseEndpoint instead.", stacklevel=2)
         return {
             "allow_abbrev": bool,
@@ -475,6 +553,12 @@ class ArgparseParser(Type1Parser):
 
     @_te.deprecated("ArgparseParser is deprecated. Please use ArgparseEndpoint instead.")
     def explain_flag(self, flag_name: str) -> str:
+        """Explain one parser flag.
+
+        :param flag_name: Flag name.
+        :return: Description text.
+        :raises ValueError: If flag is unknown.
+        """
         warnings.warn("ArgparseParser is deprecated. Please use ArgparseEndpoint instead.", stacklevel=2)
         explanations: dict[str, str] = {
             "allow_abbrev": (
@@ -489,11 +573,17 @@ class ArgparseParser(Type1Parser):
 
     @staticmethod
     def _accepts_argument(parser_flags: dict[str, _ty.Any], endpoint_path: str, name: str) -> bool:
-        """
-        enabled_flags can be:
-          - {"--foo": True} (global)
-          - {"<endpoint_path>": {"--foo": True}} (per-endpoint)
-        This helper supports both.
+        """Check whether one option spelling is enabled.
+
+        ``enabled_flags`` supports both global and per-endpoint forms:
+
+        - ``{"--foo": True}``
+        - ``{"<endpoint_path>": {"--foo": True}}``
+
+        :param parser_flags: Parser flag dictionary.
+        :param endpoint_path: Endpoint identifier.
+        :param name: Option spelling to evaluate.
+        :return: ``True`` when option is accepted.
         """
         if name in parser_flags:
             return bool(parser_flags[name])
@@ -507,6 +597,13 @@ class ArgparseParser(Type1Parser):
     def parse_args(
         self, args: list[str], arguments: list[Argument], endpoint_path: str
     ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+        """Parse tokens using stdlib argparse.
+
+        :param args: Raw CLI tokens.
+        :param arguments: Declared argument metadata.
+        :param endpoint_path: Endpoint identifier for diagnostics.
+        :return: Parsed ``(positionals, kwargs)``.
+        """
         warnings.warn("ArgparseParser is deprecated. Please use ArgparseEndpoint instead.", stacklevel=2)
         p = argparse.ArgumentParser(allow_abbrev=self.allow_abbrev, add_help=False)
 
@@ -593,7 +690,14 @@ STRICT_DFA_DEFAULT_FLAGS: dict[str, _ty.Any] = {
 
 
 class StrictDFAParser(Parser):
+    """Deterministic finite-state parser with strict option grammar."""
+
     def __init__(self, enabled_flags: dict[str, _ty.Any]) -> None:
+        """Initialize DFA parser from merged defaults and overrides.
+
+        :param enabled_flags: Runtime parser flags.
+        :return: None.
+        """
         flags = {**STRICT_DFA_DEFAULT_FLAGS, **enabled_flags}
 
         self._require_inline: bool = flags["DFA_REQUIRE_INLINE_ASSIGNMENT"]
@@ -607,9 +711,16 @@ class StrictDFAParser(Parser):
         self._bool_toggle_if_default: bool = flags["DFA_BOOL_TOGGLE_IF_DEFAULT"]
 
     def list_known_flags(self) -> dict[str, type[_ty.Any]]:
+        """Return supported configuration flags."""
         return dict(STRICT_DFA_FLAG_TYPES)
 
     def explain_flag(self, flag_name: str) -> str:
+        """Explain one parser flag.
+
+        :param flag_name: Flag name.
+        :return: Description text.
+        :raises ValueError: If flag is unknown.
+        """
         explanations: dict[str, str] = {
             "DFA_REQUIRE_INLINE_ASSIGNMENT": "Require inline '--k=v' assignment for valued options.",
             "DFA_ASSIGN_TOKENS": "Characters recognized as assignment tokens when splitting key/value.",
@@ -625,6 +736,11 @@ class StrictDFAParser(Parser):
         return explanations[key]
 
     def _split_assignment(self, s: str) -> tuple[str, str] | None:
+        """Split ``key<assign>value`` using configured assignment tokens.
+
+        :param s: Raw option body.
+        :return: ``(key, value)`` or ``None`` when no assignment token exists.
+        """
         for t in self._assign_tokens:
             k, sep, v = s.partition(t)
             if sep:
@@ -632,6 +748,13 @@ class StrictDFAParser(Parser):
         return None
 
     def _coerce_basic(self, value: str, target: type[_ty.Any]) -> _ty.Any:
+        """Coerce raw text into a basic target type.
+
+        :param value: Raw token text.
+        :param target: Destination type.
+        :return: Parsed value.
+        :raises ValueError: If conversion fails.
+        """
         if target is str:
             return value
         if target is bool:
@@ -660,6 +783,7 @@ class StrictDFAParser(Parser):
 
     @staticmethod
     def _name_to_arg(arguments: list[Argument]) -> dict[str, Argument]:
+        """Build lookup table from long/alt/short names to arguments."""
         m: dict[str, Argument] = {}
         for a in arguments:
             m[a.name] = a
@@ -671,6 +795,7 @@ class StrictDFAParser(Parser):
 
     @staticmethod
     def _finalize_defaults(parsed: dict[str, _ty.Any], arguments: list[Argument]) -> None:
+        """Apply defaults and enforce required arguments."""
         for a in arguments:
             if a.name in parsed:
                 continue
@@ -681,6 +806,13 @@ class StrictDFAParser(Parser):
 
     def parse_args(self, args: list[str], arguments: list[Argument], endpoint_path: str
                    ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+        """Parse tokens with strict DFA-style rules.
+
+        :param args: Raw CLI tokens.
+        :param arguments: Declared argument metadata.
+        :param endpoint_path: Endpoint identifier for diagnostics.
+        :return: Parsed ``(positionals, kwargs)``.
+        """
         name_map = self._name_to_arg(arguments)
         parsed: dict[str, _ty.Any] = {}
 
@@ -799,22 +931,28 @@ FAST_FLAG_DEFAULTS = {
 }
 
 class FastParser(Parser):
-    """
-    Ultra-fast deterministic CLI parser.
+    """High-throughput parser with minimal branching and strict syntax.
 
-    Rules:
-      --name=value
-      -x=value
-      --flag / -f      (bool)
-      positionals in declared order
+    Grammar:
 
-    Optimized for:
-      - one pass
-      - minimal branching
-      - no fancy error recovery
+    - ``--name=value``
+    - ``-x=value``
+    - ``--flag`` / ``-f`` for booleans
+    - positionals in declared order (when enabled)
+
+    Design focus:
+
+    - one-pass processing
+    - low branching overhead
+    - minimal recovery logic
     """
 
     def __init__(self, enabled_flags: dict[str, _ty.Any]) -> None:
+        """Initialize fast parser.
+
+        :param enabled_flags: Runtime parser flags.
+        :return: None.
+        """
         f = {**FAST_FLAG_DEFAULTS, **enabled_flags}
 
         self._allow_positional: bool = f["FAST_ALLOW_POSITIONALS"]
@@ -825,9 +963,16 @@ class FastParser(Parser):
             raise ValueError("FAST_ASSIGN_CHAR must be a single character")
 
     def list_known_flags(self) -> dict[str, type[_ty.Any]]:
+        """Return supported configuration flags."""
         return dict(FAST_FLAG_TYPES)
 
     def explain_flag(self, flag_name: str) -> str:
+        """Explain one parser flag.
+
+        :param flag_name: Flag name.
+        :return: Description text.
+        :raises ValueError: If flag is unknown.
+        """
         explanations: dict[str, str] = {
             "FAST_ALLOW_POSITIONALS": "Allow positional arguments.",
             "FAST_ASSIGN_CHAR": "Single character used for inline option assignment.",
@@ -844,6 +989,13 @@ class FastParser(Parser):
         arguments: list[Argument],
         endpoint_path: str,
     ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+        """Parse tokens using the optimized fast-path grammar.
+
+        :param args: Raw CLI tokens.
+        :param arguments: Declared argument metadata.
+        :param endpoint_path: Endpoint identifier for diagnostics.
+        :return: Parsed ``(positionals, kwargs)``.
+        """
 
         # Precompute name → Argument
         name_map = {}
@@ -923,17 +1075,37 @@ class FastParser(Parser):
 
 
 class TinyParser(Parser):
+    """Minimal parser variant with compact logic and no custom flags."""
+
     def __init__(self, enabled_flags: dict[str, _ty.Any]) -> None:
+        """Initialize tiny parser.
+
+        :param enabled_flags: Runtime parser flags (currently unused).
+        :return: None.
+        """
         pass
 
     def list_known_flags(self) -> dict[str, type[_ty.Any]]:
+        """Return supported configuration flags."""
         return {}
 
     def explain_flag(self, flag_name: str) -> str:
+        """Explain one parser flag.
+
+        :param flag_name: Flag name.
+        :raises ValueError: Always, because this parser has no flags.
+        """
         raise ValueError(f"TinyParser exposes no configurable flags. Received '{flag_name}'.")  # We do not have any flags
 
     def parse_args(self, args: list[str], arguments: list[Argument], endpoint_path: str
                    ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+        """Parse tokens using tiny parser rules.
+
+        :param args: Raw CLI tokens.
+        :param arguments: Declared argument metadata.
+        :param endpoint_path: Endpoint identifier for diagnostics.
+        :return: Parsed ``(positionals, kwargs)``.
+        """
         m = {}
         p = []
         d = {}

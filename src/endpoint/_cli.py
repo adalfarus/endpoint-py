@@ -1,4 +1,4 @@
-"""TBA"""
+"""Project-local command line entry points for development workflows."""
 import subprocess
 import inspect
 import shutil
@@ -13,6 +13,13 @@ except ImportError:
 
 
 def _change_working_dir_to_script_location():  # Duplicate code
+    """Switch the current working directory to the caller script location.
+
+    The function resolves both regular Python execution and frozen executables
+    created by tools such as PyInstaller.
+
+    :raises Exception: Re-raises any unexpected path resolution or chdir error.
+    """
     try:
         if getattr(sys, "frozen", False):
             # If the script is running as a bundled executable created by PyInstaller
@@ -33,6 +40,11 @@ def _change_working_dir_to_script_location():  # Duplicate code
 
 
 def _execute_silent_python_command(command):  # Duplicate code
+    """Run a Python command while suppressing stdout and stderr output.
+
+    :param command: Command arguments passed after ``sys.executable``.
+    :returns: ``subprocess.CompletedProcess`` for the invoked command.
+    """
     with open(os.devnull, "w") as devnull:
         result = subprocess.run(
             [sys.executable] + command, stdout=devnull, stderr=devnull
@@ -41,8 +53,22 @@ def _execute_silent_python_command(command):  # Duplicate code
 
 
 def _cli():
+    """Run the internal development CLI based on :class:`argumint.Interface`."""
+
     def _run_tests(tests: str = None, debug: bool = False, minimal: bool = False):
+        """Execute the test suite using ``pytest``.
+
+        :param tests: Relative test path below ``endpoint``.
+        :param debug: Enable verbose progress output.
+        :param minimal: Use a shorter pytest command for faster failure feedback.
+        """
+
         def _debug(*args, **kwargs):
+            """Conditionally print debug output.
+
+            :param args: Positional arguments passed to :func:`print`.
+            :param kwargs: Keyword arguments passed to :func:`print`.
+            """
             if debug:
                 print(*args, **kwargs)
 

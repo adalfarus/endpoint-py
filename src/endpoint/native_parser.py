@@ -21,53 +21,139 @@ __all__ = ["ArgumentParsingError", "TokenStream", "NativeParserFragment", "Nativ
 
 
 class Parser(metaclass=abc.ABCMeta):
+    """Abstract parser interface for endpoint argument parsing.
+
+    Concrete parsers implement this contract to expose supported flags,
+    explain configuration options, and parse CLI tokens into positional and
+    keyword values.
+    """
     IS_FULLY_FEATURED: bool = False
 
     @abc.abstractmethod
-    def __init__(self, enabled_flags: dict[str, _ty.Any]) -> None: ...
+    def __init__(self, enabled_flags: dict[str, _ty.Any]) -> None:
+        """Initialize parser instance.
+
+        :param enabled_flags: Parser-specific flags.
+        :return: None.
+        """
+        ...
     @abc.abstractmethod
-    def list_known_flags(self) -> dict[str, type[_ty.Any]]: ...
+    def list_known_flags(self) -> dict[str, type[_ty.Any]]:
+        """List supported parser flags.
+
+        :return: Mapping of flag names to expected value types.
+        """
+        ...
     @abc.abstractmethod
-    def explain_flag(self, flag_name: str) -> str: ...
+    def explain_flag(self, flag_name: str) -> str:
+        """Explain a parser flag.
+
+        :param flag_name: Flag name to explain.
+        :return: Human-readable flag description.
+        """
+        ...
     @abc.abstractmethod
-    def parse_args(self, args: list[str], arguments: "list[Argument]", endpoint_path: str) -> tuple[list[_ty.Any], dict[str, _ty.Any]]: ...
+    def parse_args(self, args: list[str], arguments: "list[Argument]", endpoint_path: str
+                   ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+        """Parse CLI arguments.
+
+        :param args: Raw CLI tokens.
+        :param arguments: Endpoint argument definitions.
+        :param endpoint_path: Endpoint identifier for diagnostics.
+        :return: Parsed ``(positional, keyword)`` values.
+        """
+        ...
 
 
 class NArgsSpec(enum.Enum):
+    """Qualitative argument-count specifier.
+
+    Used together with :class:`NArgsMode.MIN_MAX` to express whether a parser
+    should prefer few or many values when an exact count is not fixed.
+    """
     FEW = 1
     MANY = 2
     class NUMBER:
+        """Numeric nargs preference wrapper."""
         def __init__(self, n: int | None) -> None:
+            """Initialize numeric preference.
+
+            :param n: Preferred number of values, or ``None`` when unconstrained.
+            :return: None.
+            """
             self.n: int | None = n
 class NArgsMode(enum.Enum):
+    """Nargs mode definitions used by endpoint arguments."""
     ONE = 1
     ZERO_OR_ONE = 2
     class ONE_OR_MORE:
+        """Marker for one-or-more values."""
         def __init__(self, spec: NArgsSpec | NArgsSpec.NUMBER):
+            """Initialize one-or-more spec.
+
+            :param spec: Strategy used when value count can vary.
+            :return: None.
+            """
             self.spec: NArgsSpec | NArgsSpec.NUMBER = spec
     class ZERO_OR_MORE:
+        """Marker for zero-or-more values."""
         def __init__(self, spec: NArgsSpec | NArgsSpec.NUMBER):
+            """Initialize zero-or-more spec.
+
+            :param spec: Strategy used when value count can vary.
+            :return: None.
+            """
             self.spec: NArgsSpec | NArgsSpec.NUMBER = spec
 
     class NUMBER:
+        """Exact number-of-values wrapper."""
         def __init__(self, n: int) -> None:
+            """Initialize exact nargs count.
+
+            :param n: Required number of consumed values.
+            :return: None.
+            """
             self.n: int = n
     class MIN_MAX:
+        """Explicit ``min``/``max`` bounds for value counts."""
         def __init__(self, min_: int, max_: int | None, spec: NArgsSpec | NArgsSpec.NUMBER = NArgsSpec.FEW) -> None:
+            """Initialize lower/upper nargs bounds.
+
+            :param min_: Minimum allowed number of consumed values.
+            :param max_: Maximum allowed number of consumed values, or ``None``.
+            :param spec: Preference hint used by parsers when ambiguous.
+            :return: None.
+            """
             if min_ < 0 or (max_ and max_ < 0):
                 raise ValueError("Min and max both need to be >= 0")
             self.min: int = min_
             self.max: int | None = max_
             self.spec: NArgsSpec | NArgsSpec.NUMBER = spec
         def is_lower_max(self, x: int) -> bool:
+            """Return whether ``x`` is still below the configured maximum.
+
+            :param x: Current consumed value count.
+            :return: ``True`` if another value may still be consumed.
+            """
             if self.max is None:
                 return True
             return x < self.max
         def is_higher_min(self, x: int) -> bool:
+            """Return whether ``x`` is above the configured minimum.
+
+            :param x: Current consumed value count.
+            :return: ``True`` if minimum constraints are satisfied.
+            """
             return x > self.min
 C = _ty.TypeVar("C")
 @dataclass
 class Argument:
+    """Normalized endpoint argument metadata.
+
+    Instances of this dataclass are shared by parser implementations to
+    describe accepted names, expected types, defaults, nargs constraints, and
+    rendering hints for help text.
+    """
     name: str
     alternative_names: list[str]
     letter: str | None
@@ -85,13 +171,17 @@ class Argument:
 
     # Rendering helpers
     def _is_boolean(self) -> bool:
+        """Return whether the argument behaves like a boolean switch.
+
+        :return: ``True`` for ``bool`` and normalized bool unions.
+        """
         return bool is self.broken_type.base_type or (self.broken_type.base_type is _ty.Union
                                                       and len(self.broken_type.arguments) == 1)
 
     def option_names(self) -> str:
-        """
-        Returns formatted option names:
-        -v, --verbose, --verb
+        """Build formatted option aliases.
+
+        :return: Comma-separated option names.
         """
         parts: list[str] = []
 
@@ -108,8 +198,9 @@ class Argument:
         return ", ".join(dict.fromkeys(parts))
 
     def usage_fragment(self) -> str:
-        """
-        Piece used in the usage line.
+        """Build usage-line fragment for this argument.
+
+        :return: Usage fragment string.
         """
         opt = f"--{self.metavar}" if not self.metavar.startswith("-") else self.metavar
         frags: list[str]
@@ -126,8 +217,9 @@ class Argument:
         return " ".join(frag if self.required else f"[{frag}]" for frag in frags)
 
     def left_column(self) -> str:
-        """
-        Left column of help output.
+        """Build left help-column text.
+
+        :return: Left-column string.
         """
         names = ""
         if not self.kwarg_only:
@@ -141,8 +233,9 @@ class Argument:
         return names
 
     def meta_parts(self) -> list[str]:
-        """
-        Extra metadata shown in parentheses.
+        """Build metadata parts for help output.
+
+        :return: Metadata parts.
         """
         meta: list[str] = []
 
@@ -163,8 +256,9 @@ class Argument:
         return meta
 
     def right_column(self) -> str:
-        """
-        Right column text (help + metadata).
+        """Build right help-column text.
+
+        :return: Right-column string.
         """
         text = (self.help or "").strip()
         meta = self.meta_parts()
@@ -175,18 +269,32 @@ class Argument:
         return text
 
     def __hash__(self) -> int:
+        """Hash by canonical metavar for deterministic set/dict usage.
+
+        :return: Hash of ``self.metavar``.
+        """
         return hash(self.metavar)
 
     def as_readable(self) -> str:
+        """Return short debug representation.
+
+        :return: Human-readable argument identifier.
+        """
         return f"Argument({self.metavar})"
 
 
 class _BaseSeverity(enum.IntEnum):
+    """Shared base enum for parser severities."""
     def to_str(self) -> str:
+        """Return lowercase enum member name.
+
+        :return: Lowercase severity name.
+        """
         return self.name.lower()
 
 
 class ParsingErrorSeverity(_BaseSeverity):
+    """Severity levels for token-level parsing errors."""
     DOES_NOT_APPLY = 0
     CAN_CONTINUE = 1
     SKIP_TO_NEXT_SPACE = 2
@@ -194,6 +302,7 @@ class ParsingErrorSeverity(_BaseSeverity):
 
 
 class ValueParsingSeverity(_BaseSeverity):
+    """Severity levels for value-conversion/parsing errors."""
     DOES_NOT_APPLY = 0
     NOT_REQUIRED_POS = 1
     REQUIRED_POS = 2
@@ -206,38 +315,67 @@ class ValueParsingSeverity(_BaseSeverity):
 class ArgumentParsingError(Exception):
     """Exception raised when an error occurs during argument parsing.
 
-    This exception is used to indicate issues when parsing command-line arguments.
-    It includes a message and an index to indicate where the error occurred, helping
-    users or developers identify the issue in the input command.
+    This exception is used to indicate issues while tokenizing/parsing CLI
+    input. It carries an optional stream snapshot so callers can present
+    precise diagnostics to users.
 
-    Attributes:
-        index (int): The position in the argument list where the error was detected.
+    :param message: Human-readable error message.
+    :param severity: Parsing severity used for recovery decisions.
+    :param stream: Optional stream position context.
+    :return: None.
     """
 
     def __init__(self, message: str, severity: ParsingErrorSeverity = ParsingErrorSeverity.DOES_NOT_APPLY,
                  stream: "TokenStream | None" = None) -> None:
+        """Initialize parsing error object.
+
+        :param message: Human-readable error message.
+        :param severity: Recovery/continuation severity hint.
+        :param stream: Optional token stream snapshot.
+        :return: None.
+        """
         super().__init__(message)
         self.message: str = message
         self.severity: ParsingErrorSeverity = severity
         self.stream: "TokenStream | None" = stream
 
     def raise_(self) -> _ty.Self:
+        """Raise immediately for fatal severities.
+
+        :return: ``self`` when non-fatal.
+        :raises ArgumentParsingError: If severity is invalid-state.
+        """
         if self.severity == ParsingErrorSeverity.REACHED_INVALID_STATE:
             raise self
         return self
     def show(self) -> str:
+        """Render inline stream pointer if available.
+
+        :return: Stream visualization or empty string.
+        """
         if self.stream is not None:
             return self.stream.show()
         return ""
     def __str__(self) -> str:
+        """Return diagnostic string representation."""
         return f"ArgumentParsingError(message='{self.message}', stream={self.stream})"
     def __repr__(self) -> str:
+        """Return debug representation."""
         return str(self)
 
 
 class ValueParsingError(Exception):
+    """Error raised while converting token text into typed argument values."""
     def __init__(self, message: str, argument: Argument | None, parsing_errors: list[ArgumentParsingError] | None = None,
                  severity: ValueParsingSeverity = ValueParsingSeverity.DOES_NOT_APPLY) -> None:
+        """Initialize value parsing error.
+
+        :param message: Human-readable error message.
+        :param argument: Associated argument, if known.
+        :param parsing_errors: Underlying token-level parser errors.
+        :param severity: Severity classification for routing/filtering.
+        :return: None.
+        """
         super().__init__(message)
         self.message: str = message
         self.argument: Argument | None = argument
@@ -245,17 +383,30 @@ class ValueParsingError(Exception):
         self.severity: ValueParsingSeverity = severity
 
     def __str__(self) -> str:
+        """Return concise value-parsing error text."""
         return f"ValueParsingError(message='{self.message}', severity={self.severity})"
     def __repr__(self) -> str:
+        """Return debug representation."""
         return str(self)
 
 
 class TokenStream:
+    """Mutable cursor over a source string used by parser fragments."""
     def __init__(self, base_string: str) -> None:
+        """Initialize stream.
+
+        :param base_string: Source text to read.
+        :return: None.
+        """
         self._base_string: str = base_string
         self._index: int = 0
 
     def consume(self, i: int = 1) -> str | None:
+        """Consume one or more characters.
+
+        :param i: Number of characters to include in returned token.
+        :return: Consumed token, or ``None`` at EOF.
+        """
         base: str = ""
         if i > 1:
             for i in range(i-1):
@@ -270,9 +421,15 @@ class TokenStream:
         return token
 
     def consume_remaining(self) -> str:
+        """Return unconsumed remainder without moving cursor."""
         return self._base_string[self._index:]
 
     def reverse(self, i: int = 1) -> bool:
+        """Move cursor backward.
+
+        :param i: Number of characters to rewind.
+        :return: ``True`` if rewind succeeded for at least one char.
+        """
         if i > 1:
             for i in range(i-1):
                 self.reverse()
@@ -282,14 +439,23 @@ class TokenStream:
         return True
 
     def restart(self) -> None:
+        """Reset stream cursor to start."""
         self._index = 0
 
     def copy(self) -> _ty.Self:
+        """Create shallow copy preserving current index.
+
+        :return: Copied token stream.
+        """
         new_stream: TokenStream = TokenStream(self._base_string)
         new_stream._index = self._index
         return new_stream
 
     def show(self) -> str:
+        """Render source with current cursor marker.
+
+        :return: Marked string representation.
+        """
         if len(self._base_string) == 0:
             return ""
         return (self._base_string[:self._index-1]
@@ -297,42 +463,67 @@ class TokenStream:
                        + self._base_string[self._index:])
 
     def get_index(self) -> int:
+        """Return current cursor index."""
         return self._index
 
     def set_index(self, index: int) -> None:
+        """Set cursor index.
+
+        :param index: New absolute cursor position.
+        :return: None.
+        """
         if 0 > index > len(self._base_string):
             raise ValueError(f"New index {index} is not between 0 and len(self._base_string).")
         self._index = index
 
     def get_base_string(self) -> str:
+        """Return original source string."""
         return self._base_string
 
     def __str__(self) -> str:
+        """Return stream state with cursor marker."""
         string: str = self.show()
         return f"TokenStream(_index={self._index}, _base_string='{string}')"
     def __repr__(self) -> str:
+        """Return debug representation."""
         return str(self)
 
 
 X = _ty.TypeVar("X")
 class NativeParserFragment(_ty.Generic[X]):
+    """Base fragment for parsing one logical value type.
+
+    A fragment receives raw token lists for a single argument and returns
+    either a parsed value or :class:`ArgumentParsingError`.
+    """
     REPLACE: bool = False
     REPLACE_WITH_SET: bool = False
     def _parse(self, input_lst: list, last_failed: bool) -> X | ArgumentParsingError:
+        """Implement type-specific parsing for one argument value.
+
+        :param input_lst: Candidate tokens associated with one argument.
+        :param last_failed: Whether prior alternative parsing failed.
+        :return: Parsed value or parsing error.
+        """
         raise NotImplementedError()
     def _iter(self, input_: X, composite_type: BrokenType) -> _a.Iterable[tuple[_ty.Any, str | list[str], tuple[BrokenType, ...]]]:
+        """Iterate nested members for composite-type recursion."""
         raise NotImplementedError()
     def _set_one(self, input_: X, to_set: tuple[_ty.Any, _ty.Any]) -> None | X:
+        """Apply one replacement produced by recursive parsing."""
         raise NotImplementedError()
 
     def parse(self, input_lst: list, last_failed: bool) -> X | ArgumentParsingError:
+        """Parse value candidate using fragment implementation."""
         return self._parse(input_lst, last_failed)
     def iter(self, input_: X, composite_type: BrokenType) -> _a.Iterable[tuple[_ty.Any, str | list[str], tuple[BrokenType, ...]]]:
+        """Iterate composite members or raise for scalar fragments."""
         try:
             return self._iter(input_, composite_type)
         except NotImplementedError:
             raise ValueError("This is a basic data type, not a composite data type, it can't be iterated.")
     def set(self, input_: X, to_set: list[tuple[_ty.Any, _ty.Any]]) -> None | X:
+        """Apply one or more recursive replacements to composite value."""
         try:
             for to in to_set:
                 if self.REPLACE_WITH_SET:
@@ -344,6 +535,7 @@ class NativeParserFragment(_ty.Generic[X]):
         return input_  # Can always be returned as no action is taken except the flag is set
 
 class NativeUnionParserFragment(NativeParserFragment):
+    """Pass-through fragment used while trying union alternatives."""
     REPLACE = True
 
     def _parse(self, input_lst: list, last_failed: bool) -> X | ArgumentParsingError:
@@ -353,6 +545,7 @@ class NativeUnionParserFragment(NativeParserFragment):
         return [(None, input_, composite_type.arguments)]
 
 class NativeStringParserFragment(NativeParserFragment):
+    """Parse string arguments with optional quote unwrapping."""
     def __init__(self, parse_python_types: bool = True, delimiters: str = "'\"") -> None:
         self._parse_python_types: bool = parse_python_types
         self._delimiters: str = delimiters
@@ -370,6 +563,7 @@ class NativeStringParserFragment(NativeParserFragment):
         return ArgumentParsingError("A string can't be composed of multiple inputs.", ParsingErrorSeverity.DOES_NOT_APPLY, fake_stream)
 
 class NativeIntegerParserFragment(NativeParserFragment):
+    """Parse integer values from one token."""
     def _parse(self, input_lst: list, last_failed: bool) -> X | ArgumentParsingError:
         if len(input_lst) == 1:
             out: int
@@ -383,6 +577,7 @@ class NativeIntegerParserFragment(NativeParserFragment):
         return ArgumentParsingError("An integer can't be composed of multiple inputs.", ParsingErrorSeverity.DOES_NOT_APPLY, fake_stream)
 
 class NativeFloatingPointNumberParserFragment(NativeParserFragment):
+    """Parse floating-point values from one token."""
     def _parse(self, input_lst: list, last_failed: bool) -> X | ArgumentParsingError:
         if len(input_lst) == 1:
             out: float
@@ -396,6 +591,10 @@ class NativeFloatingPointNumberParserFragment(NativeParserFragment):
         return ArgumentParsingError("A floating point number can't be composed of multiple inputs.", ParsingErrorSeverity.DOES_NOT_APPLY, fake_stream)
 
 class NativeIterableParserFragment(NativeParserFragment):
+    """Parse comma-separated iterable-like values.
+
+    Handles escaped characters, quoted strings, and nested bracket blocks.
+    """
     def __init__(self, parse_python_types: bool = True, error_if_unsure: bool = True,
                  convert_to_type: type[_ty.Any] = list, assignment_tokens: str = ":=",
                  brackets: dict[str, str] | None = None) -> None:
@@ -469,6 +668,7 @@ class NativeIterableParserFragment(NativeParserFragment):
         input_[to_set[0]] = to_set[1]  # (i, parsed_x) are returned
 
 class NativeListParserFragment(NativeIterableParserFragment):
+    """List-specialized iterable fragment."""
     def __init__(self, parse_python_types: bool = True, error_if_unsure: bool = True, assignment_tokens: str = ":=",
                  brackets: dict[str, str] | None = None) -> None:
         super().__init__(parse_python_types, error_if_unsure, list, assignment_tokens, brackets or {"[": "]"})
@@ -477,6 +677,7 @@ class NativeListParserFragment(NativeIterableParserFragment):
         return super()._parse(input_lst, last_failed)  # If parse python types use list brackets
 
 class NativeDictParserFragment(NativeParserFragment):
+    """Parse dictionary-like ``key:value`` structures."""
     def __init__(self, parse_python_types: bool = True, list_separators: str = ",:;|", kv_separators: str = ",:=;",
                  ignore_random_separators: bool = False, allow_same_k_and_v_separator: bool = False,
                  assignment_tokens: str = ":=", brackets: dict[str, str] | None = None) -> None:
@@ -657,6 +858,7 @@ class NativeDictParserFragment(NativeParserFragment):
             raise ValueError(f"Type '{type_}' is not a valid dict setting type.")
 
 class NativeSetParserFragment(NativeIterableParserFragment):
+    """Set-specialized iterable fragment."""
     def __init__(self, parse_python_types: bool = True, error_if_unsure: bool = True, assignment_tokens: str = ":=",
                  brackets: dict[str, str] | None = None) -> None:
         super().__init__(parse_python_types, error_if_unsure, set, assignment_tokens, brackets or {"{": "}"})
@@ -675,6 +877,7 @@ class NativeSetParserFragment(NativeIterableParserFragment):
         input_.add(to_set[1])  # Parsed element
 
 class NativeTupleParserFragment(NativeIterableParserFragment):
+    """Tuple-specialized iterable fragment."""
     REPLACE_WITH_SET = True
     def __init__(self, parse_python_types: bool = True, error_if_unsure: bool = True, assignment_tokens: str = ":=",
                  brackets: dict[str, str] | None = None) -> None:
@@ -689,6 +892,7 @@ class NativeTupleParserFragment(NativeIterableParserFragment):
         return input_[:i] + (val,) + input_[i+1:]
 
 class NativeComplexParserFragment(NativeParserFragment):
+    """Parse complex numbers from one token."""
     def _parse(self, input_lst: list, last_failed: bool) -> X | ArgumentParsingError:
         if len(input_lst) == 1:
             out: complex
@@ -702,6 +906,7 @@ class NativeComplexParserFragment(NativeParserFragment):
         return ArgumentParsingError("A complex number can't be composed of multiple inputs.", ParsingErrorSeverity.DOES_NOT_APPLY, fake_stream)
 
 class NativeBytesParserFragment(NativeParserFragment):
+    """Parse bytes using configured text encoding."""
     def __init__(self, encoding: str = "utf-8") -> None:
         self._encoding: str = encoding
 
@@ -719,6 +924,7 @@ class NativeBytesParserFragment(NativeParserFragment):
         return ArgumentParsingError("A bytes object can't be composed of multiple inputs.", ParsingErrorSeverity.DOES_NOT_APPLY, fake_stream)
 
 class NativeBoolParserFragment(NativeParserFragment):
+    """Parse boolean flags as presence/toggle values."""
     def __init__(self, toggle_value: bool = False) -> None:
         self._toggle_value: bool = toggle_value
 
@@ -730,6 +936,7 @@ class NativeBoolParserFragment(NativeParserFragment):
 
 E = _ty.TypeVar("E")
 class NativeParserEnabledFlags(_ty.TypedDict, total=False):
+    """Supported configuration flags for :class:`NativeParser`."""
     PARSER_FRAGMENTS: dict[type[E], type[NativeParserFragment[E]]]
 
     # Argument flags
@@ -783,9 +990,19 @@ class NativeParserEnabledFlags(_ty.TypedDict, total=False):
 
 
 class NativeParser(Parser):
+    """Full-featured deterministic endpoint parser.
+
+    This parser tokenizes CLI text, resolves argument names/aliases, applies
+    type fragments, and enforces required/default/nargs behavior.
+    """
     IS_FULLY_FEATURED = True  # Pos, kwarg, choices, posonly, kwargonly, posorkwarg, complex types, ...
 
     def __init__(self, enabled_flags: NativeParserEnabledFlags) -> None:
+        """Initialize parser and fragment instances from enabled flags.
+
+        :param enabled_flags: Parser and fragment configuration values.
+        :return: None.
+        """
         self._parser_fragments: dict[type[E], type[NativeParserFragment[E]]] = {
             _ty.Union: NativeUnionParserFragment,
             str: NativeStringParserFragment,
@@ -867,6 +1084,11 @@ class NativeParser(Parser):
             self.parsers[type_] = parser(**parser_flags)  # Wrapped so this all works okay! (Needs to happen after the flags are set)
 
     def _get_parser_flags(self, parser_for_type: type) -> dict[str, _ty.Any]:
+        """Extract parser-fragment-specific constructor flags.
+
+        :param parser_for_type: Target fragment base type.
+        :return: Mapping of matching fragment options.
+        """
         parser_name: str = parser_for_type.__name__
         params_dict: dict[str, _ty.Any] = dict()
         for v, k in self.__dict__.items():
@@ -876,6 +1098,12 @@ class NativeParser(Parser):
 
     @staticmethod
     def _parse_string(stream: TokenStream, delimiter: str) -> str:
+        """Read a quoted string (including delimiters) from the stream.
+
+        :param stream: Input stream positioned at the opening delimiter.
+        :param delimiter: Delimiter character to match.
+        :return: Parsed quoted token.
+        """
         string: str = ""
         delimiters_seen: int = 0
         while token := stream.consume():
@@ -888,6 +1116,12 @@ class NativeParser(Parser):
 
     @staticmethod
     def _parse_bracket(stream: TokenStream, start_bracket: str) -> str:
+        """Read a balanced bracket block from the stream.
+
+        :param stream: Input stream positioned at opening bracket.
+        :param start_bracket: Opening bracket character.
+        :return: Parsed bracketed token including delimiters.
+        """
         end_bracket: str | None = {"(": ")", "[": "]", "{": "}", "<": ">"}.get(start_bracket)
         if end_bracket is None:
             raise ValueError(f"Unknown start bracket '{start_bracket}'.")
@@ -904,6 +1138,11 @@ class NativeParser(Parser):
         return string
 
     def _parse_argname(self, stream: TokenStream) -> str | ArgumentParsingError:
+        """Parse argument name token after ``-``/``--``.
+
+        :param stream: Token stream.
+        :return: Parsed argument name or parsing error.
+        """
         argument_name: str = ""
         skip_next: bool = False
         while token := stream.consume():
@@ -943,6 +1182,11 @@ class NativeParser(Parser):
         return argument_name
 
     def _skip_to_argval(self, stream: TokenStream) -> None | ArgumentParsingError:
+        """Consume separators between argument name and value.
+
+        :param stream: Token stream.
+        :return: ``None`` on success, or parsing error.
+        """
         had_assignment_token: bool = False
         spaces: int = 0
         while token := stream.consume():
@@ -969,6 +1213,12 @@ class NativeParser(Parser):
         return None
 
     def _parse_full_argument(self, argument_name: str, stream: TokenStream) -> tuple[str, str] | ArgumentParsingError:
+        """Parse a complete ``name=value`` pair from stream context.
+
+        :param argument_name: Pre-parsed name, or empty to parse from stream.
+        :param stream: Token stream.
+        :return: ``(name, value)`` pair or parsing error.
+        """
         if not argument_name:
             argument_name: str = self._parse_argname(stream)
         error: ArgumentParsingError | None = self._skip_to_argval(stream)
@@ -1011,6 +1261,11 @@ class NativeParser(Parser):
         return argument_name, argument_value
 
     def _parse_letters(self, stream: TokenStream) -> str | ArgumentParsingError:
+        """Parse combined short boolean flag letters.
+
+        :param stream: Token stream.
+        :return: Parsed short-letter sequence or parsing error.
+        """
         letters: str = ""
         while token := stream.consume():
             if token == " ":
@@ -1026,6 +1281,14 @@ class NativeParser(Parser):
     @staticmethod
     def _defuse_error(replacement_value: _ty.Any, possible_error: _ty.Any | ArgumentParsingError, stream: TokenStream,
                       error_lst: list[ArgumentParsingError]) -> _ty.Any | ArgumentParsingError:
+        """Collect parser errors and continue with fallback value.
+
+        :param replacement_value: Value returned when ``possible_error`` is an error.
+        :param possible_error: Candidate parsed value or parsing error.
+        :param stream: Token stream for recovery movement.
+        :param error_lst: Mutable error sink list.
+        :return: Parsed value or fallback replacement.
+        """
         if not isinstance(possible_error, ArgumentParsingError):
             return possible_error
         # possible_error.raise_()  # TODO: Handled the high severity error right? (stop parsing)
@@ -1040,6 +1303,10 @@ class NativeParser(Parser):
         return replacement_value
 
     def list_known_flags(self) -> dict[str, type[_ty.Any]]:
+        """Discover runtime-supported flag names and their value types.
+
+        :return: Flag-name/type mapping.
+        """
         flags_dict: dict[str, type[_ty.Any]] = dict()
         for v, k in self.__dict__.items():
             if v.startswith("_") and v not in {"parsers"} and not isinstance(k, _ts.FunctionType):
@@ -1048,6 +1315,12 @@ class NativeParser(Parser):
         return flags_dict
 
     def explain_flag(self, flag_name: str) -> str:
+        """Return a human-readable explanation for one parser flag.
+
+        :param flag_name: Flag to explain.
+        :return: Description string.
+        :raises ValueError: If flag is unknown.
+        """
         explanations: dict[str, str] = {
             "PARSER_FRAGMENTS": "Override or extend parser fragment classes used for value parsing.",
             "NO_POSITIONAL_ARGS": "Disallow positional arguments entirely (currently not implemented).",
@@ -1098,6 +1371,14 @@ class NativeParser(Parser):
     # TODO: Flag bool letters as letter strings vs arguments with one - and longer names
     def parse_args(self, args: list[str], arguments: list[Argument], endpoint_path: str
                    ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+        """Parse CLI tokens against endpoint argument definitions.
+
+        :param args: Raw CLI token list.
+        :param arguments: Argument metadata for target endpoint.
+        :param endpoint_path: Endpoint identifier used in diagnostics.
+        :return: Parsed ``(positionals, kwargs)``.
+        :raises ArgumentParsingError: On unrecoverable parse failures.
+        """
         bool_arg_names: list[str] = list()
         is_reference_to: dict[str, str] = dict()
         for arg in arguments:
@@ -1244,6 +1525,14 @@ class NativeParser(Parser):
         def _walk_value_type(composite_type: BrokenType, v: _ty.Any,
                              outside_value_errors: list[ArgumentParsingError] | None = None, last_failed: bool = False,
                              ) -> _ty.Any | ArgumentParsingError:
+            """Recursively parse one value against a (possibly nested) type tree.
+
+            :param composite_type: Current expected type node.
+            :param v: Raw candidate value or token list.
+            :param outside_value_errors: Optional external error sink.
+            :param last_failed: Whether the previous type branch failed.
+            :return: Parsed value, parsing error, or sentinel.
+            """
             fragment = self.parsers.get(composite_type.base_type)
             if fragment is None:
                 return _SENTINEL
@@ -1424,6 +1713,12 @@ class NativeParser(Parser):
             parsed_kwargs.update(kwarg_values)
         else:
             def _get(from_: list, index: int) -> _ty.Any:
+                """Pop one element from ``from_`` if available.
+
+                :param from_: Source list.
+                :param index: Index to pop.
+                :return: Popped value or ``None``.
+                """
                 if len(from_) > 0:
                     return from_.pop(index)
                 return None

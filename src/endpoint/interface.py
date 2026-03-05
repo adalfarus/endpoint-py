@@ -17,11 +17,10 @@ __all__ = ["Interface"]
 
 
 class Interface:
-    """A command-line argument parser that uses structured arguments and endpoints.
+    """Command router that maps CLI paths to endpoint parsers/callables.
 
-    Argumint is designed to parse CLI arguments using a predefined argument structure.
-    It allows users to define and manage argument paths, replace the argument structure,
-    and execute endpoints based on parsed arguments.
+    The interface keeps a command tree, resolves the best matching path prefix,
+    and delegates remaining tokens to the selected endpoint parser.
     """
 
     def __init__(self, interface_name: str, default_endpoint_or_message: EndpointProtocol | _a.Callable | str | None = None,
@@ -30,6 +29,22 @@ class Interface:
                  automatic_long_help_args: tuple[str, ...] = ("--?", "--help"), help_separator: str = " -> ",
                  structure: _Node | None = None, add_to_structure: bool = True, *, path_separator: str = "::",
                  generate_shortforms_and_letters: bool = True, native_endpoint_default_parser: str = "native") -> None:
+        """Initialize interface configuration and root structure.
+
+        :param interface_name: Root command name.
+        :param default_endpoint_or_message: Default endpoint/callable/message for unmatched paths.
+        :param endpoint_calling_func: Optional wrapper invoked around endpoint calls.
+        :param automatic_help_args: Tokens that trigger built-in help output.
+        :param automatic_long_help_args: Subset of help tokens that always request endpoint help.
+        :param help_separator: Separator used in rendered path/help output.
+        :param structure: Optional pre-built structure tree to adopt.
+        :param add_to_structure: Whether unknown path segments may be created on registration.
+        :param path_separator: Token separator used while registering paths.
+        :param generate_shortforms_and_letters: Whether function-derived endpoints auto-generate aliases.
+        :param native_endpoint_default_parser: Parser preset key for auto-wrapped callables.
+        :return: None.
+        :raises ValueError: If long-help tokens are not included in ``automatic_help_args``.
+        """
         self._interface_name: str = interface_name
         # if default_endpoint_or_message is None:
         #     default_endpoint = AutoEndpoint(lambda: print("This is not a valid endpoint."), "")
@@ -64,11 +79,11 @@ class Interface:
 
     @staticmethod
     def _error(i: int, command_string: str) -> None:
-        """Displays a caret (`^`) pointing to an error in the command string.
+        """Print a caret marker at one character index in a command string.
 
-        Args:
-            i (int): Index in the command string where the error occurred.
-            command_string (str): The command string with the error.
+        :param i: Error index within ``command_string``.
+        :param command_string: Full command string.
+        :return: None.
         """
         print(f"{command_string}\n{' ' * i + '^'}")
 
@@ -76,17 +91,14 @@ class Interface:
     def _lst_error(
         i: int, arg_i: int, command_lst: list[str], do_exit: bool = False
     ) -> None:
-        """Displays an error caret in a list of command arguments.
+        """Print a caret marker for a tokenized command line.
 
-        This method calculates the error position in a CLI argument list, displaying
-        a caret to indicate where the error was found. Optionally, it can exit
-        the program.
-
-        Args:
-            i (int): Index of the problematic argument in the list.
-            arg_i (int): Position within the argument string to place the caret.
-            command_lst (list[str]): List of command-line arguments.
-            do_exit (bool, optional): If True, exits the program. Defaults to False.
+        :param i: Index of the failing argument in ``command_lst``.
+        :param arg_i: Character offset within the failing argument.
+        :param command_lst: Tokenized command line.
+        :param do_exit: Whether to terminate process with status ``1`` afterwards.
+        :return: None.
+        :raises SystemExit: If ``do_exit`` is ``True``.
         """
         length = sum(len(item) for item in command_lst[:i]) + i
         print(" ".join(command_lst) + "\n" + " " * (length + arg_i) + "^")
@@ -94,17 +106,10 @@ class Interface:
             sys.exit(1)
 
     def _check_path(self, path: str) -> bool:
-        """Verifies if a specified path exists within the argument structure.
+        """Check whether a path exists in the current command tree.
 
-        This method traverses the structure to confirm whether each segment of the
-        path is valid and points to an existing command or subcommand.
-
-        Args:
-            path (str): The dot-separated path to check within the argument structure.
-            separator (str): To change the separator to use.
-
-        Returns:
-            bool: True if the path exists, False otherwise.
+        :param path: Path expression using the configured separator.
+        :return: ``True`` if path lookup succeeds, otherwise ``False``.
         """
         try:
             add_command_to_structure(path, None, None, self._structure, create_path=False,
@@ -114,19 +119,17 @@ class Interface:
         return True
 
     def path(self, path: str, endpoint: EndpointProtocol | _a.Callable | None = None, help_: str | None = None, /, replace_endpoint: bool = True) -> None:
-        """
-        This method checks if the specified path exists in the argument structure
-        before replacing the existing endpoint with the new one. If the path does
-        not exist, an error is raised.
+        """Register or update one command path endpoint.
 
-        Args:
-            path (str): The path where the endpoint will be replaced.
-            help_ (str): The help string for the path.
-            endpoint (EndpointProtocol): The new endpoint to assign to the specified path.
-            replace_endpoint (bool): If the new Endpoint should be able to replace another endpoint.
+        Non-endpoint callables are wrapped into :class:`NativeEndpoint` using
+        this interface's parser-generation options.
 
-        Raises:
-            StructureError: If the specified path does not exist in the argument structure.
+        :param path: Command path to register.
+        :param endpoint: Endpoint object or callable.
+        :param help_: Optional path help text.
+        :param replace_endpoint: Whether existing endpoint replacement is allowed.
+        :return: None.
+        :raises StructureError: If registration violates structure constraints.
         """
         if endpoint is not None:
             if not isinstance(endpoint, EndpointProtocol):
@@ -142,6 +145,12 @@ class Interface:
                                  replace_endpoint=replace_endpoint, separator=self._path_separator)
 
     def _parse_pre_args(self, arguments: list[str], skip_first_arg: bool) -> tuple[list[str], list[str], EndpointProtocol | None, _Node]:
+        """Resolve path-prefix tokens before endpoint argument parsing.
+
+        :param arguments: Raw CLI tokens.
+        :param skip_first_arg: Whether to drop program/script token first.
+        :return: Tuple of ``(matched_path_tokens, remaining_tokens, endpoint, substructure)``.
+        """
         current_level: _Node = self._structure
         if skip_first_arg:
             arguments = arguments[1:]
@@ -155,16 +164,12 @@ class Interface:
 
     def parse_cli(self, arguments: list[str] | None = None, *, skip_first_arg: bool = True
                   ) -> tuple[str, tuple[list[_ty.Any], dict[str, _ty.Any]]]:
-        """Parses CLI arguments and calls the endpoint based on the parsed path.
+        """Parse CLI input, dispatch path, and parse endpoint arguments.
 
-        This method processes command-line input, navigates the argument structure,
-        and calls the relevant endpoint function. If the path is unmatched, it calls
-        the `default_endpoint`.
-
-        Args:
-            arguments (list, optional): Arguments to be parsed, if set to None sys.argv is used.
-            skip_first_arg (bool): Defaults to true, this is to skip the path of the file that was called as that
-                is often not what you want to get parsed. This parameter also influences if the base node is skipped.
+        :param arguments: Raw CLI tokens, or ``None`` to use ``sys.argv``.
+        :param skip_first_arg: Whether to skip first token during parsing.
+        :return: ``(resolved_path, parsed_endpoint_arguments)``.
+        :raises SystemExit: On automatic help output paths.
         """
         if arguments is None:
             arguments = sys.argv

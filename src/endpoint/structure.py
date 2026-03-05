@@ -16,14 +16,28 @@ __all__ = ["StructureError", "Structure", "add_command_to_structure", "rename_st
 
 
 class StructureError(Exception):
-    """TBA"""
+    """Raised when command-tree structure operations fail."""
 
     def __init__(self, message: str) -> None:
+        """Initialize structure error.
+
+        :param message: Human-readable failure reason.
+        :return: None.
+        """
         super().__init__(message)
 
 
 class _Node:
+    """Internal tree node used to represent command-path hierarchy."""
+
     def __init__(self, parent: _ty.Self | None = None, name: str | None = None, help_: str | None = None) -> None:
+        """Initialize node metadata and children map.
+
+        :param parent: Parent node, or ``None`` for root.
+        :param name: Node segment name.
+        :param help_: Optional help text associated with this node.
+        :return: None.
+        """
         self._parent: _ty.Self | None = parent
         self._name: str | None = name
         self._help: str | None = help_
@@ -31,30 +45,72 @@ class _Node:
         self._children: dict[str, _ty.Self] = dict()
 
     def get_name(self) -> str | None:
+        """Return node name.
+
+        :return: Node segment name or ``None``.
+        """
         return self._name
 
     def set_name(self, name: str | None) -> None:
+        """Set node name.
+
+        :param name: New node segment name.
+        :return: None.
+        """
         self._name = name
 
     def get_parent(self) -> _ty.Self | None:
+        """Return parent node.
+
+        :return: Parent node or ``None``.
+        """
         return self._parent
 
     def set_parent(self, parent: _ty.Self | None):
+        """Set parent node.
+
+        :param parent: New parent node.
+        :return: None.
+        """
         self._parent = parent
 
     def get_help(self) -> str:
+        """Return node help text.
+
+        :return: Help text.
+        """
         return self._help
 
     def set_help(self, help_: str) -> None:
+        """Set node help text.
+
+        :param help_: Help text.
+        :return: None.
+        """
         self._help = help_
 
     def get_content(self) -> EndpointProtocol | None:
+        """Return endpoint content attached to this node.
+
+        :return: Endpoint or ``None``.
+        """
         return self._content
 
     def set_content(self, content: EndpointProtocol | None) -> None:
+        """Attach endpoint content to this node.
+
+        :param content: Endpoint value or ``None``.
+        :return: None.
+        """
         self._content = content
 
     def get_available_paths(self, base: str | None = None, *, separator: str = " -> ") -> list[tuple[str, _ty.Self]]:
+        """Collect reachable path strings and terminal nodes.
+
+        :param base: Existing prefix while recursing.
+        :param separator: Path separator for rendered output.
+        :return: List of ``(path, node)`` tuples.
+        """
         if self._name is None:  # Root
             return list(self._children.values())[0].get_available_paths(separator=separator)
 
@@ -68,30 +124,61 @@ class _Node:
         return rest
 
     def update(self) -> None:
+        """Rebind child parent/name metadata recursively.
+
+        :return: None.
+        """
         for name, child in self._children.items():
             child.set_parent(self)
             child.set_name(name)
             child.update()
 
     def keys(self) -> list[str]:
+        """Return child-key list."""
         return list(self._children.keys())
 
     def values(self) -> list[_ty.Self]:
+        """Return child-node list."""
         return list(self._children.values())
 
     def __getitem__(self, item: str) -> _ty.Self | None:
+        """Get child by key.
+
+        :param item: Child key.
+        :return: Child node or ``None``.
+        """
         return self._children.get(item)
 
     def __setitem__(self, key: str, value: _ty.Self):
+        """Set child node under key.
+
+        :param key: Child key.
+        :param value: Child node.
+        :return: None.
+        """
         self._children[key] = value
 
     def __delitem__(self, key: str):
+        """Delete child node by key.
+
+        :param key: Child key.
+        :return: None.
+        """
         del self._children[key]
 
     def __contains__(self, item: str) -> bool:
+        """Return whether a child key exists.
+
+        :param item: Child key.
+        :return: ``True`` if key exists.
+        """
         return item in self._children.keys()
 
     def __str__(self) -> str:
+        """Return nested dict-like debug view of subtree.
+
+        :return: String representation.
+        """
         def to_dict(node: "_Node"):
             result = {}
 
@@ -108,6 +195,11 @@ class _Node:
 
 
 def Structure(name: str) -> _Node:
+    """Create a new structure with one named base command node.
+
+    :param name: Root command name.
+    :return: Root wrapper node.
+    """
     base_node = _Node(None)
     command_base = _Node(base_node)
     base_node[name] = command_base
@@ -115,6 +207,13 @@ def Structure(name: str) -> _Node:
 
 
 def _parse_command_path(command_path: str, separator: str = "::") -> list[str]:
+    """Split command path into segments (legacy parser).
+
+    :param command_path: Raw path string.
+    :param separator: Segment separator token.
+    :return: Path segments.
+    :raises StructureError: If path contains empty segments.
+    """
     path: list[str] = []
     last_separator: int = 0
     separator_i: int = 0
@@ -144,6 +243,15 @@ def _parse_command_path(command_path: str, separator: str = "::") -> list[str]:
 
 
 def _parse_command_path_escaped(command_path: str, separator: str = "::") -> list[str]:
+    """Split command path into segments with escape handling.
+
+    Backslash escapes suppress separator interpretation for the next character.
+
+    :param command_path: Raw path string.
+    :param separator: Segment separator token.
+    :return: Parsed path segments.
+    :raises StructureError: If path contains empty segments.
+    """
     path: list[str] = []
     separator_i: int = 0
     skip_next: bool = False
@@ -181,6 +289,18 @@ def _parse_command_path_escaped(command_path: str, separator: str = "::") -> lis
 def add_command_to_structure(command_path: str, help_: str | None, endpoint: EndpointProtocol | None = None,
                              structure: _Node | None = None, *, create_path: bool = True,
                              replace_endpoint: bool = False, separator: str = "::") -> _Node:
+    """Insert/update a command path in the structure tree.
+
+    :param command_path: Path to add.
+    :param help_: Optional help text for terminal node.
+    :param endpoint: Endpoint to attach.
+    :param structure: Existing structure root, or ``None`` for a new tree.
+    :param create_path: Whether missing intermediate segments may be created.
+    :param replace_endpoint: Whether existing endpoint may be overwritten.
+    :param separator: Path separator.
+    :return: Updated structure root.
+    :raises StructureError: If path is invalid or disallowed by options.
+    """
     if structure is None:
         structure = Structure("command")
     path: list[str] = _parse_command_path_escaped(command_path, separator)
@@ -213,6 +333,12 @@ def add_command_to_structure(command_path: str, help_: str | None, endpoint: End
 
 
 def rename_structure(structure: _Node, new_name: str) -> None:
+    """Rename top-level command key in structure.
+
+    :param structure: Structure root node.
+    :param new_name: Replacement root key.
+    :return: None.
+    """
     current_name: str = structure.keys()[0]
     current_base: _Node = structure[current_name]
     del structure[current_name]
@@ -221,8 +347,7 @@ def rename_structure(structure: _Node, new_name: str) -> None:
 
 
 def structure_help(structure: _Node, *, separator: str = " -> ") -> str:
-    """
-    Create an argparse-like help text for a command tree built from `_Node`.
+    """Render command-tree help output.
 
     The tree is interpreted as a command hierarchy:
 
@@ -234,22 +359,9 @@ def structure_help(structure: _Node, *, separator: str = " -> ") -> str:
     - The displayed command path is built by joining node names with `separator`
       (e.g. "root::base::sub::cmd").
 
-    Args:
-        structure:
-            Root `_Node` of the command structure.
-
-        separator:
-            String used to join command path segments.
-
-    Returns:
-        A formatted help string listing commands and (if available) each endpoint's
-        short description.
-
-    Notes:
-        This function assumes:
-        - Each endpoint object (BaseEndpoint) may provide `.help()` (string) and/or
-          a docstring. If neither is available, it shows an empty description.
-        - Root/base names are taken from the first two levels of keys under `structure`.
+    :param structure: Root :class:`_Node` of command structure.
+    :param separator: Separator used for displayed command paths.
+    :return: Formatted multi-line command help text.
     """
     output: str = "commands:"
     paths: list[tuple[str, _Node]] = structure.get_available_paths(separator=separator) or ["(no commands registered)"]

@@ -1,4 +1,4 @@
-"""Functional"""
+"""Helpers for function signature analysis and type introspection."""
 import sys
 
 from dataclasses import dataclass, field, asdict
@@ -17,11 +17,22 @@ __all__ = ["NoDefault", "pretty_type", "BrokenType", "break_type", "guess_type",
 
 
 class NoDefault:
+    """Sentinel that marks parameters without an explicit default value."""
+
     def __repr__(self) -> str:
+        """Return a stable debug representation for the sentinel.
+
+        :returns: String representation used in logs and diagnostics.
+        """
         return "<NoDefault Object>"
 
 
 def pretty_type(tp) -> str:
+    """Render a human-readable name for Python and typing objects.
+
+    :param tp: Type object or typing annotation to format.
+    :returns: Readable type name, including generic arguments when available.
+    """
     if isinstance(tp, type):  # Builtins + normal classes
         return tp.__name__
 
@@ -41,25 +52,40 @@ def pretty_type(tp) -> str:
 
 @dataclass(frozen=True)
 class BrokenType:
+    """Structured representation of a possibly nested type annotation.
+
+    :ivar base_type: The root type or typing construct.
+    :ivar arguments: Recursively broken child type arguments.
+    """
+
     base_type: _ty.Any
     arguments: tuple[_ty.Self, ...]
 
     def __str__(self) -> str:
+        """Return a readable recursive representation.
+
+        :returns: String form showing base type and nested arguments.
+        """
         arg_str: str = ", ".join(str(x) if isinstance(x, BrokenType) else pretty_type(x) for x in self.arguments)
         return f"BrokenType(base_type={pretty_type(self.base_type)}, arguments=({arg_str}))"
 
     def __repr__(self) -> str:
+        """Mirror :meth:`__str__` for debug output.
+
+        :returns: Same text as :meth:`__str__`.
+        """
         return str(self)
 
 
 def break_type(type_annotation: _ty.Any) -> BrokenType | tuple[BrokenType]:  # _ty.Any | BrokenType | tuple[_ty.Any | BrokenType, ...]:
-    """
-    Recursively break a typing annotation into BrokenType nodes.
+    """Recursively normalize a typing annotation into :class:`BrokenType`.
 
-    Leaves are returned as-is (e.g. int, str, bool, NoneType, etc).
-    Containers/generics become BrokenType(origin, tuple(broken_args)).
-    Unions become BrokenType(typing.Union, tuple(broken_members)).
-    Literals become BrokenType(typing.Literal, tuple(literal_values)).
+    Leaves such as ``int`` or ``str`` are represented as a node without
+    arguments. Generic and union constructs are expanded recursively into
+    nested nodes.
+
+    :param type_annotation: Annotation object to normalize.
+    :returns: Recursive :class:`BrokenType` tree for the annotation.
     """
     if isinstance(type_annotation, _ty.ForwardRef):  # Resolve forward refs if any (best-effort; if unresolved, keep as-is)
         return BrokenType(type_annotation.__forward_arg__, tuple())
@@ -78,11 +104,30 @@ def break_type(type_annotation: _ty.Any) -> BrokenType | tuple[BrokenType]:  # _
 
 B = _ty.TypeVar("B")
 def guess_type(value: B) -> type[B]:
+    """Return the runtime type for a value.
+
+    :param value: Value to inspect.
+    :returns: ``type(value)``.
+    """
     return type(value)
 
 
 @dataclass(slots=True)
 class ArgumentAnalysis:
+    """Normalized metadata for a single analyzed callable argument.
+
+    :ivar name: Parameter name.
+    :ivar default: Default value or :class:`NoDefault`.
+    :ivar choices: Literal value choices, if constrained.
+    :ivar type: Raw or normalized type annotation.
+    :ivar type_choices: Candidate types extracted from unions.
+    :ivar doc_help: Parameter help text extracted from the docstring.
+    :ivar pos_only: Whether the parameter is positional-only.
+    :ivar kwarg_only: Whether the parameter is keyword-only.
+    :ivar is_arg: Whether the parameter originates from ``*args``.
+    :ivar is_kwarg: Whether the parameter originates from ``**kwargs``.
+    """
+
     name: str
     default: _ty.Any | NoDefault
     choices: _a.Sequence[_ty.Any] = field(default_factory=tuple)        # Literal choices
@@ -97,6 +142,19 @@ class ArgumentAnalysis:
 
 @dataclass(slots=True)
 class Analysis:
+    """Structured summary for callable signature and docstring analysis.
+
+    :ivar name: Callable name.
+    :ivar doc: Full callable docstring.
+    :ivar help_: Remaining general help text after parameter extraction.
+    :ivar arguments: Parsed argument metadata.
+    :ivar has_args: Whether the callable accepts ``*args``.
+    :ivar has_kwargs: Whether the callable accepts ``**kwargs``.
+    :ivar return_type: Parsed return type annotation.
+    :ivar return_choices: Literal return choices, when constrained.
+    :ivar return_doc_help: Return value help extracted from the docstring.
+    """
+
     name: str
     doc: str = ""
     help_: str = ""
@@ -110,7 +168,10 @@ class Analysis:
     return_doc_help: str = ""
 
     def to_dict(self) -> dict[str, _ty.Any]:
-        """Backwards-compatible dict shape (including the original keys)."""
+        """Convert to the historical dictionary shape used by callers.
+
+        :returns: Dictionary with legacy key names for compatibility.
+        """
         return {
             "name": self.name,
             "doc": self.doc,
@@ -125,7 +186,11 @@ class Analysis:
 
     @classmethod
     def from_dict(cls, data: dict[str, _ty.Any]) -> "Analysis":
-        """Create an Analysis from the dict returned by your current analyze_function()."""
+        """Create an :class:`Analysis` instance from a serialized dictionary.
+
+        :param data: Mapping produced by :func:`analyze_function`.
+        :returns: Materialized :class:`Analysis` object.
+        """
         return cls(
             name=data.get("name", ""),
             doc=data.get("doc", "") or "",
@@ -140,43 +205,36 @@ class Analysis:
 
 
 class AnalyzableFunction(_ty.Protocol):
+    """Protocol describing the callable attributes needed for analysis."""
+
     __name__: str
     __doc__: str | None
     __annotations__: _ty.Mapping[str, _ty.Any]
     __defaults__: tuple[_ty.Any, ...] | None
     __kwdefaults__: dict[str, _ty.Any] | None
     __code__: _ts.CodeType
-    def __call__(self, *args: _ty.Any, **kwargs: _ty.Any) -> _ty.Any: ...
+    def __call__(self, *args: _ty.Any, **kwargs: _ty.Any) -> _ty.Any:
+        """Invoke the callable.
+
+        :param args: Positional invocation arguments.
+        :param kwargs: Keyword invocation arguments.
+        :returns: Callable return value.
+        """
+        ...
 
 
 def old_analyze_function(function: _a.Callable, /, break_types: bool = True, guess_types: bool = True) -> dict[str, list[_ty.Any] | str | None]:
-    """
-    Analyzes a given function's signature and docstring, returning a structured summary of its
-    arguments, including default values, types, keyword-only flags, documentation hints, and
-    choices for `Literal`-type arguments. Also extracts information on `*args`, `**kwargs`,
-    and the return type.
+    """Analyze a function and return a legacy dict-style metadata object.
 
-    Args:
-        function (types.FunctionType): The function to analyze.
-        break_types (bool): If composite types like list[str] should be broken down.
-        guess_types (bool): Try to guess the type if only a value is provided.
+    This helper is maintained for backward compatibility with older call
+    sites. It inspects parameters, defaults, docstring snippets, ``Literal``
+    choices, variadic arguments, and return metadata.
 
-    Returns:
-        dict: A dictionary containing the following keys:
-            - "name" (str): The name of the function.
-            - "doc" (str): The function's docstring.
-            - "arguments" (List[Dict[str, Union[str, None]]]): Details of each argument:
-                - "name" (str): The argument's name.
-                - "default" (Any or None): The default value, if provided.
-                - "choices" (List[Any] or []): Options for `Literal` type hints, if applicable.
-                - "type" (Any or None): The argument's type hint.
-                - "doc_help" (str): The extracted docstring help for the argument.
-                - "kwarg_only" (bool): True if the argument is keyword-only.
-            - "has_*args" (bool): True if the function accepts variable positional arguments.
-            - "has_**kwargs" (bool): True if the function accepts variable keyword arguments.
-            - "return_type" (Any or None): The function's return type hint.
-            - "return_choices" (List[Any] or []): Options for `Literal` type hints for the return type, if applicable.
-            - "return_doc_help" (str): The extracted docstring help for the return type.
+    :param function: Callable to inspect.
+    :param break_types: Whether to normalize annotations via :func:`break_type`.
+    :param guess_types: Whether to infer missing types from default values.
+    :returns: Legacy analysis dictionary compatible with existing consumers.
+    :raises ValueError: If ``function`` is not a real function object.
     """
     if hasattr(function, "__func__"):
         function = function.__func__
@@ -284,6 +342,12 @@ def old_analyze_function(function: _a.Callable, /, break_types: bool = True, gue
 
 
 def _get_from_func_help(func_help: str, argname: str) -> tuple[str, str]:
+    """Extract one argument's help snippet from docstring text.
+
+    :param func_help: Remaining docstring text.
+    :param argname: Argument name to extract help for.
+    :returns: Tuple of ``(remaining_help, extracted_argument_help)``.
+    """
     argument_start = func_help.find(argname)
     help_str, choices, type_choices = "", tuple(), tuple()
     if argument_start != -1:
@@ -300,33 +364,16 @@ def _get_from_func_help(func_help: str, argname: str) -> tuple[str, str]:
 
 
 def analyze_function(function: _a.Callable, /, break_types: bool = True, guess_types: bool = True) -> dict[str, list[_ty.Any] | str | None]:
-    """
-    Analyzes a given function's signature and docstring, returning a structured summary of its
-    arguments, including default values, types, keyword-only flags, documentation hints, and
-    choices for `Literal`-type arguments. Also extracts information on `*args`, `**kwargs`,
-    and the return type.
+    """Analyze callable parameters, defaults, and docstring-derived help.
 
-    Args:
-        function (types.FunctionType): The function to analyze.
-        break_types (bool): If composite types like list[str] should be broken down.
-        guess_types (bool): Try to guess the type if only a value is provided.
+    The return format is a dictionary for compatibility with existing code.
+    Use :func:`get_analysis` when you need the dataclass representation.
 
-    Returns:
-        dict: A dictionary containing the following keys:
-            - "name" (str): The name of the function.
-            - "doc" (str): The function's docstring.
-            - "arguments" (List[Dict[str, Union[str, None]]]): Details of each argument:
-                - "name" (str): The argument's name.
-                - "default" (Any or None): The default value, if provided.
-                - "choices" (List[Any] or []): Options for `Literal` type hints, if applicable.
-                - "type" (Any or None): The argument's type hint.
-                - "doc_help" (str): The extracted docstring help for the argument.
-                - "kwarg_only" (bool): True if the argument is keyword-only.
-            - "has_*args" (bool): True if the function accepts variable positional arguments.
-            - "has_**kwargs" (bool): True if the function accepts variable keyword arguments.
-            - "return_type" (Any or None): The function's return type hint.
-            - "return_choices" (List[Any] or []): Options for `Literal` type hints for the return type, if applicable.
-            - "return_doc_help" (str): The extracted docstring help for the return type.
+    :param function: Callable to inspect.
+    :param break_types: Whether to normalize annotations via :func:`break_type`.
+    :param guess_types: Whether to infer missing annotations from defaults.
+    :returns: Dictionary containing callable and argument analysis data.
+    :raises ValueError: If ``function`` is not a real function object.
     """
     if hasattr(function, "__func__"):
         function = function.__func__
@@ -424,18 +471,11 @@ def analyze_function(function: _a.Callable, /, break_types: bool = True, guess_t
 
 
 def get_analysis(function: _a.Callable, /, break_types: bool = True) -> Analysis:
-    """
-    Analyzes a given function's signature and docstring, returning a structured summary of its
-    arguments, including default values, types, keyword-only flags, documentation hints, and
-    choices for `Literal`-type arguments. Also extracts information on `*args`, `**kwargs`,
-    and the return type.
+    """Analyze a callable and return the dataclass-backed :class:`Analysis`.
 
-    Args:
-        function (types.FunctionType): The function to analyze.
-        break_types (bool): If composite types like list[str] should be broken down.
-
-    Returns:
-        Analysis
+    :param function: Callable object or callable instance to analyze.
+    :param break_types: Whether to normalize nested type annotations.
+    :returns: Structured :class:`Analysis` result.
     """
     if (not isinstance(function, _ts.FunctionType)
             and hasattr(function, "__call__")
