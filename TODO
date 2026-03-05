@@ -1,0 +1,6 @@
+Implement no positional flag
+Choose arg assignment char:: Already got arg assignment tokens
+
+ADD DOCSTRINGS!
+
+ADD **kwargs to parsing (functionality) meaning it captures all passed **kwargs --> IT DOES! Need to add to README

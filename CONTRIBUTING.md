@@ -55,4 +55,4 @@ Thank you for your interest in contributing to `aplustools`! We welcome contribu
 - Feel free to open an issue or create a pull request, regardless of your experience level.
 - Join our community chat to discuss the project with other contributors.
 
-Thank you for contributing to `aplustools`!
+Thank you for contributing to `endpoint.cli`!

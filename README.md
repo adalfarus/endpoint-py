@@ -1,8 +1,8 @@
 [![Active Development](https://img.shields.io/badge/Maintenance%20Level-Actively%20Developed-brightgreen.svg)](https://gist.github.com/cheerfulstoic/d107229326a01ff0f333a1d3476e068d)
-[![CI Test Status](https://github.com/Adalfarus/endpoint/actions/workflows/test-package.yml/badge.svg)](https://github.com/Adalfarus/endpoint/actions)
-[![License: LGPL-2.1](https://img.shields.io/github/license/Adalfarus/endpoint)](https://github.com/Adalfarus/endpoint/blob/main/LICENSE)
-[![PyPI Downloads](https://static.pepy.tech/badge/endpoint)](https://pepy.tech/projects/endpoint)
-![coverage](https://raw.githubusercontent.com/Adalfarus/endpoint/refs/heads/main/coverage-badge.svg)
+[![CI Test Status](https://github.com/Adalfarus/endpoint-py/actions/workflows/test-package.yml/badge.svg)](https://github.com/Adalfarus/endpoint-py/actions)
+[![License: GPL-3.0](https://img.shields.io/github/license/Adalfarus/endpoint-py)](https://github.com/Adalfarus/endpoint-py/blob/main/LICENSE)
+[![PyPI Downloads](https://static.pepy.tech/badge/endpoint.cli)](https://pepy.tech/projects/endpoint.cli)
+![coverage](https://raw.githubusercontent.com/Adalfarus/endpoint-py/refs/heads/main/coverage-badge.svg)
 
 # end.
 
@@ -72,10 +72,13 @@ You can use the aps_build_master script for your os to make your like a lot easi
 It supports running tests, installing, building and much more as well as chaining together as many commands as you like.
 
 This example runs test, build the project and then installs it
+
+Windows:
 ````commandline
 call .\aps_build_master.bat 234
 ````
 
+Unix:
 ````shell
 sudo apt install python3-pip
 sudo apt install python3-venv

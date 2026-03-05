@@ -27,7 +27,7 @@ exclude = [
 
 [project]
 name = "endpoint.cli"
-version = "2.0.0.6"
+version = "2.1.0.7"
 dependencies = ["typing_extensions"]
 requires-python = ">= 3.10"
 authors = [
@@ -36,10 +36,10 @@ authors = [
 maintainers = [
   {name = "Cariel Becker", email = "cariel.becker@gmx.de"},
 ]
-description = "A small timer utility that has all the helpful features you could ever want!"
+description = "A refined, full scale solution to CLIs ."
 readme = {file = "README.md", content-type = "text/markdown"}
 license = "GPL-3.0-only"
-keywords = ["general", "tools", "app tools", "production", "apt"]
+keywords = ["general", "tools", "app tools", "production", "cli", "parser", "full-scale"]
 classifiers = [
 	"Development Status :: 5 - Production/Stable",
 	"Programming Language :: Python",
@@ -47,15 +47,18 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "coverage", "pre-commit", "ruff", "pdoc>=14.0"]
+dev = ["pytest", "coverage", "pre-commit", "ruff", "pdoc>=14.0", "argumint"]
 
 [project.urls]
-Home = "https://pypi.org/project/endpoint.py/"
-Repository = "https://github.com/adalfarus/endpoint.py"
-Documentation = "https://github.com/adalfarus/endpoint.py/wiki"
-"Issue tracker" = "https://github.com/adalfarus/endpoint.py/issues"
+Home = "https://pypi.org/project/endpoint-py/"
+Repository = "https://github.com/adalfarus/endpoint-py"
+Documentation = "https://github.com/adalfarus/endpoint-py/wiki"
+"Issue tracker" = "https://github.com/adalfarus/endpoint-py/issues"
 
 #[tool.pytest.ini_options]
 ## This is equivalent to setup_requires and tests_require
 ## Add your pytest configuration here
 #addopts = "your pytest options"
+
+[project.scripts]
+endpoint-cli = "endpoint._cli:_cli"
