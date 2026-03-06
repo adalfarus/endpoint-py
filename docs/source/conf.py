@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath("../../src"))
 # -- Project information -----------------------------------------------------
 project = "endpoint"
 author = "adalfarus (Cariel Becker)"
-copyright = f"2025, {author}"
+copyright = f"2026, {author}"
 release = "2.1.0.7"
 
 # -- General configuration ---------------------------------------------------
