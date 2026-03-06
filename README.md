@@ -1,6 +1,6 @@
 [![Active Development](https://img.shields.io/badge/Maintenance%20Level-Actively%20Developed-brightgreen.svg)](https://gist.github.com/cheerfulstoic/d107229326a01ff0f333a1d3476e068d)
 [![CI Test Status](https://github.com/Adalfarus/endpoint-py/actions/workflows/test-package.yml/badge.svg)](https://github.com/Adalfarus/endpoint-py/actions)
-[![License: GPL-3.0](https://img.shields.io/github/license/Adalfarus/endpoint-py)](https://github.com/Adalfarus/endpoint-py/blob/main/LICENSE)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![PyPI Downloads](https://static.pepy.tech/badge/endpoint.cli)](https://pepy.tech/projects/endpoint.cli)
 ![coverage](https://raw.githubusercontent.com/Adalfarus/endpoint-py/refs/heads/main/coverage-badge.svg)
 
