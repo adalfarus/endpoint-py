@@ -1,6 +1,14 @@
 endpoint package
 ================
 
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   endpoint.tests
+
 Submodules
 ----------
 

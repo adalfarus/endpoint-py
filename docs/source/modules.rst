@@ -1,5 +1,5 @@
 endpoint
-========
+=======
 
 .. toctree::
    :maxdepth: 4
