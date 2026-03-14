@@ -44,13 +44,13 @@ def test_light_parser_parses_long_and_short_flags() -> None:
         _arg("count", int, required=True),
     ]
 
-    pos, kw = p.parse_args(["--verbose", "--count", "3"], args, endpoint_path="ep")
+    pos, kw = p.parse_args(["--verbose", "--count", "3"], args, endpoint_path="ep", endpoint_help_func=lambda: "")
     assert pos == []
     assert kw["verbose"] is True
     assert kw["count"] == 3
 
     # short combined bools: -v
-    pos2, kw2 = p.parse_args(["-v", "--count=4"], args, endpoint_path="ep")
+    pos2, kw2 = p.parse_args(["-v", "--count=4"], args, endpoint_path="ep", endpoint_help_func=lambda: "")
     assert pos2 == []
     assert kw2["verbose"] is True
     assert kw2["count"] == 4
@@ -62,7 +62,7 @@ def test_token_stream_parser_repeatable_collections() -> None:
     args = [arg_tags]
 
     _, kw = p.parse_args(
-        ["--tags=a,b", "--tags=c"], args, endpoint_path="ep"
+        ["--tags=a,b", "--tags=c"], args, endpoint_path="ep", endpoint_help_func=lambda: ""
     )
     assert kw["tags"] == ["a", "b", "c"]
 
@@ -75,7 +75,7 @@ def test_strict_dfa_parser_inline_assignment_and_bool() -> None:
     ]
 
     # bool presence
-    _, kw = p.parse_args(["--flag", "--value=3"], args, endpoint_path="ep")
+    _, kw = p.parse_args(["--flag", "--value=3"], args, endpoint_path="ep", endpoint_help_func=lambda: "")
     assert kw["flag"] is True
     assert kw["value"] == 3
 
@@ -88,7 +88,7 @@ def test_fast_parser_basic() -> None:
     ]
 
     _, kw = p.parse_args(
-        ["10", "--flag"], args, endpoint_path="ep"
+        ["10", "--flag"], args, endpoint_path="ep", endpoint_help_func=lambda: ""
     )
     assert kw["value"] == 10
     assert kw["flag"] is True
@@ -101,7 +101,7 @@ def test_tiny_parser_defaults_and_required() -> None:
         _arg("opt", int, default=5),
     ]
 
-    _, kw = p.parse_args(["10"], args, endpoint_path="ep")
+    _, kw = p.parse_args(["10"], args, endpoint_path="ep", endpoint_help_func=lambda: "")
     assert kw["value"] == 10
     assert kw["opt"] == 5
 
@@ -152,11 +152,11 @@ def test_token_stream_parser_end_of_options_and_missing_value_error() -> None:
     p = TokenStreamParser({"interleaved_positionals": False})
     args = [_arg("value", int, required=True)]
 
-    _, kw = p.parse_args(["--", "7"], args, endpoint_path="ep")
+    _, kw = p.parse_args(["--", "7"], args, endpoint_path="ep", endpoint_help_func=lambda: "")
     assert kw["value"] == 7
 
     with pytest.raises(ArgumentParsingError):
-        p.parse_args(["--value"], args, endpoint_path="ep")
+        p.parse_args(["--value"], args, endpoint_path="ep", endpoint_help_func=lambda: "")
 
 
 def test_argparse_parser_filters_disabled_flags_and_rejects_extra() -> None:
@@ -164,7 +164,7 @@ def test_argparse_parser_filters_disabled_flags_and_rejects_extra() -> None:
     args = [_arg("value", int, required=True)]
 
     with pytest.raises(ArgumentParsingError):
-        p.parse_args(["junk"], args, endpoint_path="ep")
+        p.parse_args(["junk"], args, endpoint_path="ep", endpoint_help_func=lambda: "")
 
 
 def test_strict_dfa_parser_errors_and_short_inline_assignment() -> None:
@@ -174,12 +174,12 @@ def test_strict_dfa_parser_errors_and_short_inline_assignment() -> None:
         _arg("value", int, required=True),
     ]
 
-    _, kw = p.parse_args(["-v=3", "--flag"], args, endpoint_path="ep")
+    _, kw = p.parse_args(["-v=3", "--flag"], args, endpoint_path="ep", endpoint_help_func=lambda: "")
     assert kw["value"] == 3
     assert kw["flag"] is True
 
     with pytest.raises(ArgumentParsingError):
-        p.parse_args(["10", "--flag"], args, endpoint_path="ep")
+        p.parse_args(["10", "--flag"], args, endpoint_path="ep", endpoint_help_func=lambda: "")
 
 
 def test_fast_and_tiny_error_paths() -> None:
@@ -188,8 +188,8 @@ def test_fast_and_tiny_error_paths() -> None:
 
     fp = FastParser({"FAST_ALLOW_POSITIONALS": False})
     with pytest.raises(ArgumentParsingError):
-        fp.parse_args(["10"], [_arg("value", int, required=True)], endpoint_path="ep")
+        fp.parse_args(["10"], [_arg("value", int, required=True)], endpoint_path="ep", endpoint_help_func=lambda: "")
 
     tp = TinyParser({})
-    _, kw = tp.parse_args([], [_arg("value", int, required=True)], endpoint_path="ep")
+    _, kw = tp.parse_args([], [_arg("value", int, required=True)], endpoint_path="ep", endpoint_help_func=lambda: "")
     assert "value" in kw

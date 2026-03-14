@@ -138,7 +138,7 @@ def test_native_parser_basic_end_to_end_positional_and_kwarg() -> None:
         _arg_for("b", int, required=True),
     ]
 
-    pos, kw = parser.parse_args(["1", "--b", "2"], args, endpoint_path="ep")
+    pos, kw = parser.parse_args(["1", "--b", "2"], args, endpoint_path="ep", endpoint_help_func=lambda: "")
     # a is positional-only, b is kwarg
     assert "a" in kw and "b" in kw
     assert kw["a"] == 1
@@ -150,7 +150,7 @@ def test_native_parser_deterministic_mode_simple() -> None:
     parser = NativeParser({"ALLOW_NON_DETERMINISTIC_BEHAVIOUR": False})
     args = [_arg_for("x", int, required=True)]
 
-    pos, kw = parser.parse_args(["1"], args, endpoint_path="ep")
+    pos, kw = parser.parse_args(["1"], args, endpoint_path="ep", endpoint_help_func=lambda: "")
     assert pos == []
     assert kw["x"] == 1
 
@@ -160,7 +160,7 @@ def test_native_parser_deterministic_mode_too_many_positional_raises() -> None:
     args = [_arg_for("x", int, required=True)]
 
     with pytest.raises(ValueError) as excinfo:
-        parser.parse_args(["1", "2"], args, endpoint_path="ep")
+        parser.parse_args(["1", "2"], args, endpoint_path="ep", endpoint_help_func=lambda: "")
 
     # Aggregated error message should mention too many positional arguments
     assert "too many positional arguments" in str(excinfo.value)
@@ -170,12 +170,12 @@ def test_native_parser_str_parse_python_types_flag_controls_quoting() -> None:
     arg = _arg_for("s", str, required=True)
 
     parser_default = NativeParser({})
-    _, kw_default = parser_default.parse_args(["'hi'"], [arg], endpoint_path="ep")
+    _, kw_default = parser_default.parse_args(["'hi'"], [arg], endpoint_path="ep", endpoint_help_func=lambda: "")
     # With default STR_PARSE_PYTHON_TYPES=True, outer quotes are stripped
     assert kw_default["s"] == "hi"
 
     parser_no_py = NativeParser({"STR_PARSE_PYTHON_TYPES": False})
-    _, kw_no_py = parser_no_py.parse_args(["'hi'"], [arg], endpoint_path="ep")
+    _, kw_no_py = parser_no_py.parse_args(["'hi'"], [arg], endpoint_path="ep", endpoint_help_func=lambda: "")
     # When disabled, quotes are preserved
     assert kw_no_py["s"] == "'hi'"
 
@@ -188,7 +188,7 @@ def test_native_parser_bool_toggle_value_flag() -> None:
     args[0].nargs = NArgsMode.MIN_MAX(1, None, NArgsSpec.NUMBER(1))
 
     # Two occurrences => toggled back to False
-    _, kw = parser.parse_args(["--flag", "--flag"], args, endpoint_path="ep")
+    _, kw = parser.parse_args(["--flag", "--flag"], args, endpoint_path="ep", endpoint_help_func=lambda: "")
     assert kw["flag"] is False
 
 
@@ -196,7 +196,7 @@ def test_native_parser_allows_unknown_kwargs_when_flag_disabled() -> None:
     parser = NativeParser({"ERROR_IF_TOO_MANY_KWARGS": False})
     args = [_arg_for("known", int, required=False)]
 
-    pos, kw = parser.parse_args(["--unknown=5"], args, endpoint_path="ep")
+    pos, kw = parser.parse_args(["--unknown=5"], args, endpoint_path="ep", endpoint_help_func=lambda: "")
     assert pos == []
     # Unknown kwarg should be preserved when ERROR_IF_TOO_MANY_KWARGS is False
     assert kw["unknown"] == ["5"]
