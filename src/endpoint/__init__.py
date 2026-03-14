@@ -15,5 +15,5 @@ if _ty.TYPE_CHECKING:
     import _typeshed as _tsh
 import types as _ts
 
-__version__ = "2.1.1.2"
+__version__ = "2.1.1.3"
 __all__ = ["NativeEndpoint", "ArgparseEndpoint", "Interface", "NativeParser", "__version__"]

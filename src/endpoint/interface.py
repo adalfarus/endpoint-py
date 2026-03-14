@@ -29,7 +29,7 @@ class Interface:
                  automatic_help_args: tuple[str, ...] = ("-?", "-h", "--?", "--help"),
                  automatic_long_help_args: tuple[str, ...] = ("--?", "--help"), help_separator: str = " -> ",
                  structure: _Node | None = None, add_to_structure: bool = True, *, path_separator: str = "::",
-                 function_argument_ignore_prefix: str = "___",
+                 function_argument_ignore_prefix: str = "_",
                  ignored_function_arguments: tuple[str, ...] = ("cls", "self"),
                  generate_shortforms_and_letters: bool = True,
                  native_endpoint_default_parser: Parser | None = None) -> None:

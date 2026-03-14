@@ -561,7 +561,7 @@ class NativeEndpoint(EndpointProtocol):
 
     @classmethod
     def from_function(cls, function: _a.Callable, name: str, help_str: str = "", snakecase_replacement: str = "-",
-                      function_argument_ignore_prefix: str = "___",
+                      function_argument_ignore_prefix: str = "_",
                       ignored_function_arguments: tuple[str, ...] = ("cls", "self"), *,
                       generate_shortforms_and_letters: bool = True, calling_func: CallingFunc | None = None,
                       parser: Parser | None = None) -> _te.Self:
