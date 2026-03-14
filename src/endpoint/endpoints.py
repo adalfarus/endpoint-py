@@ -234,6 +234,8 @@ class NativeEndpoint(EndpointProtocol):
         if "-" in name:  # Name is namespace so we need to guarantee a valid name
             if positional_only:
                 raise ValueError("Positional only arguments cannot have '-' in it's name.")
+            if name.startswith("-"):  # To achieve compatibility with argparse
+                kwarg_only = True
             name = name.lstrip("-")
             if metavar is None:
                 metavar = name
