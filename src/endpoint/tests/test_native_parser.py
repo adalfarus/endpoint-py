@@ -220,12 +220,15 @@ def test_argument_rendering_helpers_cover_readable_methods() -> None:
 
     assert "-v" in arg.option_names()
     assert "--value" in arg.option_names()
-    assert "required" in arg.right_column()
-    assert "default: 3" in arg.right_column()
+    assert "required" in arg.right_column(split_positionals=False)
+    assert "required" in arg.right_column(split_positionals=True)
+    assert "default: 3" in arg.right_column(split_positionals=False)
+    assert "default: 3" in arg.right_column(split_positionals=True)
     assert "Argument(value)" == arg.as_readable()
     assert isinstance(hash(arg), int)
     assert "value" in arg.usage_fragment()
-    assert "--value" in arg.left_column()
+    assert "--value" in arg.left_column(split_positionals=False)
+    assert "--value" in arg.left_column(split_positionals=True)
 
 
 def test_argument_and_value_parsing_error_helpers() -> None:
