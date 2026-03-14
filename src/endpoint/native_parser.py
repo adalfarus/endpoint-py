@@ -1530,7 +1530,7 @@ class NativeParser(Parser):
                 output += f"{i}. {error.message}\n"
                 output += f"   > index: {error.stream.get_index()}\n"
                 output += f"   > input: {error.show()}\n"
-            # raise ValueError(output)
+            raise ValueError(output)
             print(output)
             sys.exit(0)
             return list(), dict()
@@ -1667,7 +1667,7 @@ class NativeParser(Parser):
                         output += f"   > Name: {error.argument.metavar}\n"
                         output += f"   > NArgs: MIN_MAX({error.argument.nargs.min}, {error.argument.nargs.max})\n"
                         output += f"   > NArgsSpec N: {error.argument.nargs.spec.n}\n"
-                # raise ValueError(output)
+                raise ValueError(output + "\n" + endpoint_help_func())
                 print(output)
                 print(endpoint_help_func())
                 sys.exit(0)
@@ -1893,7 +1893,7 @@ class NativeParser(Parser):
                         output += f"   {j}. {parsing_error.message}\n"
                         output += f"      > index: {parsing_error.stream.get_index()}\n"
                         output += f"      > input: {parsing_error.show()}\n"
-            # raise ValueError(output)
+            raise ValueError(output + "\n" + endpoint_help_func())
             print(output)
             print(endpoint_help_func())
             sys.exit(0)
