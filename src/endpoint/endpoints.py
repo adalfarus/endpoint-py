@@ -362,6 +362,7 @@ class NativeEndpoint(EndpointProtocol):
             if arg_letter is not None:
                 arg.letter = arg_letter
 
+    # TODO: Split into positional section and arg section
     def generate_help(self, prog: str = "endpoint", automatic_help_args: tuple[str, ...] = ("-?", "-h", "--?", "--help"),
                       width: int | None = None) -> str:
         """Render argparse-like help text for this endpoint.
