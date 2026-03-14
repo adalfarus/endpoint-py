@@ -371,11 +371,13 @@ def structure_help(structure: _Node, *, separator: str = " -> ", show_help_args:
         content: EndpointProtocol | None = node.get_content()
         content_help: str
         if content is None:
-            content_help = ""
+            content_help = " "
         else:
             if not show_help_args:
-                content_help = " " + content.generate_help(prog="", automatic_help_args=tuple()).strip().splitlines()[0].strip().removeprefix("usage:  ")
-            else:
-                content_help = " " + content.generate_help(prog="").strip().splitlines()[0].strip().removeprefix("usage:  ")
-        output += "\n  " + path.ljust(max_len, " ") + content_help + " " * 5 + node.get_help()
+                help_: str = content.generate_help(prog="", automatic_help_args=tuple()).strip().splitlines()[0].strip().removeprefix("usage:").strip()
+                content_help = " " + help_
+            else:  # TODO: If re-enabling the showing one would need to pass the currently selected help args
+                raise NotImplementedError("If re-enabling the showing one would need to pass the currently selected help args")
+                content_help = " " + content.generate_help(prog="").strip().splitlines()[0].strip().removeprefix("usage:").strip()
+        output += "\n  " + path.ljust(max_len, " ") + content_help + " | " * (1 * (len(content_help)-1>0)) + f"({node.get_help()})"
     return output

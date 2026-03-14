@@ -134,7 +134,7 @@ class Interface:
             return False
         return True
 
-    def path(self, path: str, endpoint: EndpointProtocol | _a.Callable | None = None, help_: str | None = None, /, replace_endpoint: bool = True) -> None:
+    def path(self, path: str, endpoint: EndpointProtocol | _a.Callable | None = None, help_: str | None = None, *, replace_endpoint: bool = True) -> None:
         """Register or update one command path endpoint.
 
         Non-endpoint callables are wrapped into :class:`NativeEndpoint` using
@@ -174,10 +174,11 @@ class Interface:
             arguments = arguments[1:]
             current_level: _Node = current_level[current_level.keys()[0]]  # Skip base node
         i: int = 0
-        for i, ix in enumerate(arguments):
+        for ix in arguments:
             if ix not in current_level:
                 break
             current_level = current_level[ix]
+            i += 1
         return arguments[:i], arguments[i:], current_level.get_content(), current_level
 
     def parse_cli(self, arguments: list[str] | None = None, *, skip_first_arg: bool = True
@@ -213,9 +214,9 @@ class Interface:
                 sys.exit(0)
                 return path, (list(), dict())
 
-        # We do the help ourselves
+        # We do the help ourselves and parse_pre_args does the first arg skipping if required
         parsed_arguments: tuple[list[_ty.Any], dict[str, _ty.Any]] = endpoint.parse(args_to_parse,
-                                                                                    skip_first_arg=skip_first_arg,
+                                                                                    skip_first_arg=False,
                                                                                     automatic_help_args=tuple())
 
         return path, parsed_arguments
