@@ -55,7 +55,7 @@ def test_parse_cli_uses_endpoint_calling_wrapper() -> None:
     path, _ = itf.parse_cli(["prog", "run"], skip_first_arg=True)
 
     # Current _parse_pre_args implementation drops the final matched token.
-    assert path == ""
+    assert path == "run"
     assert seen["called"] is True
     assert seen["wrapped"] is True
 
