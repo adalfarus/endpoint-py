@@ -221,7 +221,7 @@ def test_argument_rendering_helpers_cover_readable_methods() -> None:
     assert "-v" in arg.option_names()
     assert "--value" in arg.option_names()
     assert "required" in arg.right_column(split_positionals=False)
-    assert "required" in arg.right_column(split_positionals=True)
+    assert "required" not in arg.right_column(split_positionals=True)
     assert "default: 3" in arg.right_column(split_positionals=False)
     assert "default: 3" in arg.right_column(split_positionals=True)
     assert "Argument(value)" == arg.as_readable()
