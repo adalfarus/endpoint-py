@@ -462,7 +462,7 @@ class NativeEndpoint(EndpointProtocol):
             warnings.warn(f"The chosen parser '{self._parser}' is not fully features. This means features like: "
                           f"\n- Positionals\n- Keywords\n- Choices\n- Pos-only\n- Keyword-only\n- Pos or Keyword\n- "
                           f"Complex types\n- ...", stacklevel=2)
-        parsed_pos, parsed_kwarg = self._parser.parse_args(arguments, self.copy_arguments(), self._name)
+        parsed_pos, parsed_kwarg = self._parser.parse_args(arguments, self.copy_arguments(), self._name, self.generate_help)
         self.call(args=parsed_pos, kwargs=parsed_kwarg)
 
         return parsed_pos, parsed_kwarg

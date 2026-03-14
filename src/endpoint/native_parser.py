@@ -53,13 +53,14 @@ class Parser(metaclass=abc.ABCMeta):
         """
         ...
     @abc.abstractmethod
-    def parse_args(self, args: list[str], arguments: "list[Argument]", endpoint_path: str
-                   ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+    def parse_args(self, args: list[str], arguments: "list[Argument]", endpoint_path: str,
+                   endpoint_help_func: _a.Callable[[], str]) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
         """Parse CLI arguments.
 
         :param args: Raw CLI tokens.
         :param arguments: Endpoint argument definitions.
         :param endpoint_path: Endpoint identifier for diagnostics.
+        :param endpoint_help_func: Endpoint help in case of error.
         :return: Parsed ``(positional, keyword)`` values.
         """
         ...
@@ -1384,8 +1385,8 @@ class NativeParser(Parser):
 
     # TODO: Easy to switch out ArgumentParsers and ArgumentValueParsers (For no_positional_args and similar)
     # TODO: Flag bool letters as letter strings vs arguments with one - and longer names
-    def parse_args(self, args: list[str], arguments: list[Argument], endpoint_path: str
-                   ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+    def parse_args(self, args: list[str], arguments: list[Argument], endpoint_path: str,
+                   endpoint_help_func: _a.Callable[[], str]) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
         """Parse CLI tokens against endpoint argument definitions.
 
         :param args: Raw CLI token list.
@@ -1590,7 +1591,7 @@ class NativeParser(Parser):
                 for k in arguments}
             for arg, (curr, i) in trying_numbers.copy().items():
                 while i < 0:
-                    if arg.nargs.is_lower_max(curr):
+                    if arg.nargs.is_lower_max(curr) and not arg.positional_only:
                         curr += 1
                         i += 1
                         trying_numbers[arg] = (curr, i)
@@ -1608,7 +1609,7 @@ class NativeParser(Parser):
 
             loop_n: int = 0
             while True:
-                difference: int = sum(x[1] for x in trying_numbers.values()) - len(posarg_values)
+                difference: int = sum(x[1] for k, x in trying_numbers.items() if not k.kwarg_only) - len(posarg_values)
                 changed: bool = False
 
                 if difference == 0:

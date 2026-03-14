@@ -222,8 +222,8 @@ class LightParser(Type1Parser):
             raise ValueError(f"Unknown flag '{flag_name}'. Known flags: {', '.join(explanations)}")
         return explanations[key]
 
-    def parse_args(self, args: list[str], arguments: list[Argument], endpoint_path: str
-                   ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+    def parse_args(self, args: list[str], arguments: "list[Argument]", endpoint_path: str,
+                   endpoint_help_func: _a.Callable[[], str]) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
         """Parse tokens using long/short options and positionals.
 
         :param args: Raw CLI tokens.
@@ -722,9 +722,8 @@ class TokenStreamParser(Type1Parser):
             )
         return self._pack_multi_values(arg, collected), i
 
-    def parse_args(
-        self, args: list[str], arguments: list[Argument], endpoint_path: str
-    ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+    def parse_args(self, args: list[str], arguments: "list[Argument]", endpoint_path: str,
+                   endpoint_help_func: _a.Callable[[], str]) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
         """Parse tokens with stream semantics and advanced option handling.
 
         :param args: Raw CLI tokens.
@@ -982,9 +981,8 @@ class ArgparseParser(Type1Parser):
         return True
 
     @_te.deprecated("ArgparseParser is deprecated. Please use ArgparseEndpoint instead.")
-    def parse_args(
-        self, args: list[str], arguments: list[Argument], endpoint_path: str
-    ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+    def parse_args(self, args: list[str], arguments: "list[Argument]", endpoint_path: str,
+                   endpoint_help_func: _a.Callable[[], str]) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
         """Parse tokens using stdlib argparse.
 
         :param args: Raw CLI tokens.
@@ -1192,8 +1190,8 @@ class StrictDFAParser(Parser):
             elif a.required:
                 raise ArgumentParsingError(f"Missing required argument: {a.name}")
 
-    def parse_args(self, args: list[str], arguments: list[Argument], endpoint_path: str
-                   ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+    def parse_args(self, args: list[str], arguments: "list[Argument]", endpoint_path: str,
+                   endpoint_help_func: _a.Callable[[], str]) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
         """Parse tokens with strict DFA-style rules.
 
         :param args: Raw CLI tokens.
@@ -1371,12 +1369,8 @@ class FastParser(Parser):
             raise ValueError(f"Unknown flag '{flag_name}'. Known flags: {', '.join(explanations)}")
         return explanations[key]
 
-    def parse_args(
-        self,
-        args: list[str],
-        arguments: list[Argument],
-        endpoint_path: str,
-    ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+    def parse_args(self, args: list[str], arguments: "list[Argument]", endpoint_path: str,
+                   endpoint_help_func: _a.Callable[[], str]) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
         """Parse tokens using the optimized fast-path grammar.
 
         :param args: Raw CLI tokens.
@@ -1485,8 +1479,8 @@ class TinyParser(Parser):
         """
         raise ValueError(f"TinyParser exposes no configurable flags. Received '{flag_name}'.")  # We do not have any flags
 
-    def parse_args(self, args: list[str], arguments: list[Argument], endpoint_path: str
-                   ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+    def parse_args(self, args: list[str], arguments: "list[Argument]", endpoint_path: str,
+                   endpoint_help_func: _a.Callable[[], str]) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
         """Parse tokens using tiny parser rules.
 
         :param args: Raw CLI tokens.
