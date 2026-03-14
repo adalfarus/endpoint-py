@@ -71,7 +71,7 @@ class Interface:
         else:
             default_endpoint = default_endpoint_or_message
         self._default_endpoint: EndpointProtocol | None = default_endpoint  # Print structure help if None
-        if endpoint_calling_func is not None:
+        if endpoint_calling_func is not None and self._default_endpoint is not None:
             self._default_endpoint.set_calling_func(endpoint_calling_func)
         self._endpoint_calling_func: CallingFunc | None = endpoint_calling_func
         self._automatic_help_args: tuple[str, ...] = automatic_help_args
