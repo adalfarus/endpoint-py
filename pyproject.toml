@@ -27,7 +27,7 @@ exclude = [
 
 [project]
 name = "endpoint.cli"
-version = "2.1.1.0"
+version = "2.1.1.1"
 dependencies = ["typing_extensions"]
 requires-python = ">= 3.10"
 authors = [

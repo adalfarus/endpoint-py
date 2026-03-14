@@ -22,7 +22,7 @@ if _ty.TYPE_CHECKING:
     import _typeshed as _tsh
 import types as _ts
 
-__all__ = ["EndpointError", "EndpointProtocol", "NativeEndpoint", "ArgparseEndpoint"]
+__all__ = ["EndpointError", "EndpointProtocol", "NativeEndpoint", "ArgparseEndpoint", "CallingFunc"]
 
 
 class EndpointError(Exception):
@@ -36,6 +36,21 @@ class EndpointError(Exception):
         super().__init__(message)
 
 
+P = _ty.ParamSpec("P")
+R = _ty.TypeVar("R")
+class CallingFunc(_ty.Protocol[P, R]):
+    """Protocol for custom endpoint invocation wrappers."""
+
+    def __call__(self, endpoint: "EndpointProtocol", fn: _a.Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
+        """Execute ``fn`` for an endpoint with full call context.
+
+        :param endpoint: Endpoint that owns the function.
+        :param fn: Target callable to execute.
+        :param args: Positional call arguments.
+        :param kwargs: Keyword call arguments.
+        :returns: Wrapped call result.
+        """
+        ...
 class EndpointProtocol(metaclass=abc.ABCMeta):
     """Abstract interface implemented by endpoint parser backends."""
 
@@ -48,7 +63,7 @@ class EndpointProtocol(metaclass=abc.ABCMeta):
         """
         ...
     @abc.abstractmethod
-    def set_calling_func(self, func: _a.Callable) -> None:
+    def set_calling_func(self, func: CallingFunc) -> None:
         """Set a custom invocation wrapper.
 
         :param func: Wrapper callable that controls endpoint invocation.
@@ -120,21 +135,6 @@ class ArgumentChanges(_ty.TypedDict, total=False):
     metavar: str | None
     nargs: NARGS_TYPE
     checking_func: _a.Callable[[Argument, _ty.Any], _ty.Any | ArgumentParsingError] | None
-P = _ty.ParamSpec("P")
-R = _ty.TypeVar("R")
-class CallingFunc(_ty.Protocol[P, R]):
-    """Protocol for custom endpoint invocation wrappers."""
-
-    def __call__(self, endpoint: EndpointProtocol, fn: _a.Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
-        """Execute ``fn`` for an endpoint with full call context.
-
-        :param endpoint: Endpoint that owns the function.
-        :param fn: Target callable to execute.
-        :param args: Positional call arguments.
-        :param kwargs: Keyword call arguments.
-        :returns: Wrapped call result.
-        """
-        ...
 class NativeEndpoint(EndpointProtocol):
     """Represents the endpoint of a trace from an argument structure object.
 
@@ -362,37 +362,51 @@ class NativeEndpoint(EndpointProtocol):
             if arg_letter is not None:
                 arg.letter = arg_letter
 
-    # TODO: Split into positional section and arg section
-    def generate_help(self, prog: str = "endpoint", automatic_help_args: tuple[str, ...] = ("-?", "-h", "--?", "--help"),
+    def generate_help(self, prog: str = "endpoint",
+                      automatic_help_args: tuple[str, ...] = ("-?", "-h", "--?", "--help"),
+                      automatic_help_type: _ty.Literal["native", "argparse"] = "native",
                       width: int | None = None) -> str:
         """Render argparse-like help text for this endpoint.
 
         :param prog: Program/command name shown in the usage line.
         :param automatic_help_args: Help tokens shown in usage output.
+        :param automatic_help_type: If positional arguments should be under a different header than keyword arguments.
         :param width: Optional wrapping width; autodetected when ``None``.
         :returns: Formatted endpoint help text.
         """
         if width is None:  # Try to get terminal width
             width = shutil.get_terminal_size(fallback=(88, 24)).columns
 
+        split_positionals: bool = automatic_help_type == "argparse"
+
         # Arg usage
         usage_fragments: list[str] = list()
         usage_fragments.append(" ".join(f"[{help_arg}]" for help_arg in automatic_help_args))
         usage_fragments.append(" ".join(a.usage_fragment() for a in self._arguments))
         usage = " ".join(usage_fragments)
-        out = [f"usage: {prog} {usage}".rstrip(), "", "options:"]
+        out = [f"usage: {prog} {usage}".rstrip()]
 
         if self._help_str:
             out.insert(1, f"explaination: {self._help_str}")
 
-        left = [a.left_column() for a in self._arguments]
+        if split_positionals:
+            out.extend(["", "positional arguments:"])
+            indent = "  "
+
+            for a in self._arguments:
+                if not a.kwarg_only:
+                    out.append(f"{indent}{a.name}")
+
+        out.extend(["", "options:"])
+
+        left = [a.left_column(split_positionals=split_positionals) for a in self._arguments]
         left_w = min(max((len(s) for s in left), default=0), 40)
 
         indent = "  "
         gap = "  "
 
         for a, l in zip(self._arguments, left):
-            right = a.right_column()
+            right = a.right_column(split_positionals=split_positionals)  # Argparse does not have metadata information
 
             if not right:
                 out.append(f"{indent}{l}")
@@ -439,13 +453,15 @@ class NativeEndpoint(EndpointProtocol):
         self._help_str = help_str
 
     def parse(self, arguments: list[str] | None = None, *, skip_first_arg: bool = True,
-              automatic_help_args: tuple[str, ...] = ("-?", "-h", "--?", "--help")
+              automatic_help_args: tuple[str, ...] = ("-?", "-h", "--?", "--help"),
+              automatic_help_type: _ty.Literal["native", "argparse"] = "native",
               ) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
         """Parse arguments, call endpoint function, and return parsed values.
 
         :param arguments: Explicit argv list; defaults to ``sys.argv``.
         :param skip_first_arg: Skip program path in argv.
         :param automatic_help_args: Tokens that trigger help output.
+        :param automatic_help_type: If positional arguments should be under a different header than keyword arguments.
         :returns: Tuple of parsed positional and keyword arguments.
         """
         if arguments is None:
@@ -455,7 +471,8 @@ class NativeEndpoint(EndpointProtocol):
 
         for arg in arguments:
             if arg in automatic_help_args:
-                print(self.generate_help(prog=self._name))
+                print(self.generate_help(prog=self._name, automatic_help_args=automatic_help_args,
+                                         automatic_help_type=automatic_help_type))
                 sys.exit(0)
                 return list(), dict()
 
@@ -481,9 +498,10 @@ class NativeEndpoint(EndpointProtocol):
         """
         is_bool: bool = bool == argument.broken_type.base_type or (
                     argument.broken_type.base_type == _ty.Union and bool in argument.broken_type.arguments)
-        names = [f"--{x}" for x in [argument.metavar, *argument.alternative_names]]
+        names = list()
         if argument.letter:
             names.append(f"-{argument.letter}")
+        names.extend([f"--{x}" for x in [argument.metavar, *argument.alternative_names]])
 
         if is_bool:
             parser.add_argument(*names, help=argument.help,
@@ -510,7 +528,7 @@ class NativeEndpoint(EndpointProtocol):
             parser.add_argument(argument.name, help=argument.help,  # Positional
                                 default=argparse.SUPPRESS, # type=argument.type,  # py3.11 argparse bug fix
                                 choices=argument.choices if argument.choices else None,
-                                metavar=argument.metavar, nargs="?")
+                                metavar=argument.metavar, nargs="?" if not argument.required else 1)
             parser.add_argument(*names, help=argument.help, dest=argument.name,  # Kwarg
                                 default=argparse.SUPPRESS, type=argument.type,
                                 choices=argument.choices if argument.choices else None,
@@ -524,7 +542,7 @@ class NativeEndpoint(EndpointProtocol):
 
         :returns: Populated argparse parser mirroring this endpoint.
         """
-        parser = ArgumentParser(description=self._help_str)
+        parser = ArgumentParser(prog=self._name, description=self._help_str)
         for argument in self._arguments:
             self._add_arg_to_argparse_like(argument, parser)
         return parser
@@ -534,13 +552,15 @@ class NativeEndpoint(EndpointProtocol):
 
         :returns: Populated :class:`ArgparseEndpoint`.
         """
-        aep = ArgparseEndpoint(description=self._help_str)
+        aep = ArgparseEndpoint(prog=self._name, description=self._help_str)
         for argument in self._arguments:
             self._add_arg_to_argparse_like(argument, aep)
         return aep
 
     @classmethod
-    def from_function(cls, function: _a.Callable, name: str, help_str: str = "", snakecase_replacement: str = "-", *,
+    def from_function(cls, function: _a.Callable, name: str, help_str: str = "", snakecase_replacement: str = "-",
+                      function_argument_ignore_prefix: str = "___",
+                      ignored_function_arguments: tuple[str, ...] = ("cls", "self"), *,
                       generate_shortforms_and_letters: bool = True, calling_func: CallingFunc | None = None,
                       parser: Parser | None = None) -> _te.Self:
         """Create an endpoint by analyzing a callable signature.
@@ -549,6 +569,8 @@ class NativeEndpoint(EndpointProtocol):
         :param name: Endpoint/program display name.
         :param help_str: Explicit help override; inferred when empty.
         :param snakecase_replacement: Replacement for underscores in metavars.
+        :param function_argument_ignore_prefix: What function arguments with prefix should be ignored.
+        :param ignored_function_arguments: What argument names should be ignored.
         :param generate_shortforms_and_letters: Whether to auto-generate aliases.
         :param calling_func: Optional custom invocation wrapper.
         :param parser: Optional parser backend implementation.
@@ -558,7 +580,7 @@ class NativeEndpoint(EndpointProtocol):
         analysis: Analysis = get_analysis(function, break_types=False)
 
         for arg in analysis.arguments:
-            if arg.name in {"cls", "self"} or arg.is_kwarg:
+            if arg.name in ignored_function_arguments or arg.name.startswith(function_argument_ignore_prefix) or arg.is_kwarg:
                 continue
             ep.add_argument(
                 name=arg.name,
@@ -709,7 +731,9 @@ class ArgparseEndpoint(EndpointProtocol):
             argv = argv[1:]
 
         if automatic_help_args and any(a in argv for a in automatic_help_args):
-            return list(), {"help": self.generate_help(prog=self._parser.prog)}
+            print(self.generate_help(prog=self._parser.prog))
+            sys.exit(0)
+            return list(), dict()
 
         ns = self._parser.parse_args(argv)
 

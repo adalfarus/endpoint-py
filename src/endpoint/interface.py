@@ -1,7 +1,7 @@
 import sys
 
 # Internal import
-from .endpoints import EndpointProtocol, NativeEndpoint
+from .endpoints import EndpointProtocol, NativeEndpoint, CallingFunc
 from .native_parser import Parser
 from .structure import _Node, rename_structure, Structure, add_command_to_structure, StructureError, structure_help
 
@@ -25,10 +25,12 @@ class Interface:
     """
 
     def __init__(self, interface_name: str, default_endpoint_or_message: EndpointProtocol | _a.Callable | str | None = None,
-                 endpoint_calling_func: _a.Callable | None = None,
+                 endpoint_calling_func: CallingFunc | None = None,
                  automatic_help_args: tuple[str, ...] = ("-?", "-h", "--?", "--help"),
                  automatic_long_help_args: tuple[str, ...] = ("--?", "--help"), help_separator: str = " -> ",
                  structure: _Node | None = None, add_to_structure: bool = True, *, path_separator: str = "::",
+                 function_argument_ignore_prefix: str = "___",
+                 ignored_function_arguments: tuple[str, ...] = ("cls", "self"),
                  generate_shortforms_and_letters: bool = True,
                  native_endpoint_default_parser: Parser | None = None) -> None:
         """Initialize interface configuration and root structure.
@@ -42,6 +44,8 @@ class Interface:
         :param structure: Optional pre-built structure tree to adopt.
         :param add_to_structure: Whether unknown path segments may be created on registration.
         :param path_separator: Token separator used while registering paths.
+        :param function_argument_ignore_prefix: The prefix of arguments that should be ignored while using .from_func
+        :param ignored_function_arguments: What argument names should be ignored while using .from_func
         :param generate_shortforms_and_letters: Whether function-derived endpoints auto-generate aliases.
         :param native_endpoint_default_parser: Parser preset for auto-wrapped callables.
         :return: None.
@@ -52,18 +56,24 @@ class Interface:
         #     default_endpoint = AutoEndpoint(lambda: print("This is not a valid endpoint."), "")
         if isinstance(default_endpoint_or_message, str):
             default_endpoint = NativeEndpoint.from_function(lambda: print(default_endpoint_or_message), "",
+                                                            function_argument_ignore_prefix=function_argument_ignore_prefix,
+                                                            ignored_function_arguments=ignored_function_arguments,
                                                             generate_shortforms_and_letters=generate_shortforms_and_letters,
                                                             parser=native_endpoint_default_parser)
         elif default_endpoint_or_message is None:
             default_endpoint = default_endpoint_or_message
         elif not isinstance(default_endpoint_or_message, EndpointProtocol):
             default_endpoint = NativeEndpoint.from_function(default_endpoint_or_message, "",
+                                                            function_argument_ignore_prefix=function_argument_ignore_prefix,
+                                                            ignored_function_arguments=ignored_function_arguments,
                                                             generate_shortforms_and_letters=generate_shortforms_and_letters,
                                                             parser=native_endpoint_default_parser)
         else:
             default_endpoint = default_endpoint_or_message
         self._default_endpoint: EndpointProtocol | None = default_endpoint  # Print structure help if None
-        self._endpoint_calling_func: _a.Callable | None = endpoint_calling_func
+        if endpoint_calling_func is not None:
+            self._default_endpoint.set_calling_func(endpoint_calling_func)
+        self._endpoint_calling_func: CallingFunc | None = endpoint_calling_func
         self._automatic_help_args: tuple[str, ...] = automatic_help_args
         if not all(x in automatic_help_args for x in automatic_long_help_args):
             raise ValueError(f"Not all long help arg ({automatic_long_help_args}) are in the normal help args "
@@ -78,8 +88,10 @@ class Interface:
             self._structure = Structure(interface_name)
         self._add_to_structure: bool = add_to_structure
         self._path_separator: str = path_separator
+        self._function_argument_ignore_prefix: str = function_argument_ignore_prefix
+        self._ignored_function_arguments: tuple[str, ...] = ignored_function_arguments
         self._generate_shortforms_and_letters: bool = generate_shortforms_and_letters
-        self._native_endpoint_default_parser: str = native_endpoint_default_parser
+        self._native_endpoint_default_parser: Parser = native_endpoint_default_parser
 
     @staticmethod
     def _error(i: int, command_string: str) -> None:
@@ -138,7 +150,9 @@ class Interface:
         if endpoint is not None:
             if not isinstance(endpoint, EndpointProtocol):
                 endpoint = NativeEndpoint.from_function(endpoint, "",
-                                              generate_shortforms_and_letters=self._generate_shortforms_and_letters,
+                                                        function_argument_ignore_prefix=self._function_argument_ignore_prefix,
+                                                        ignored_function_arguments=self._ignored_function_arguments,
+                                                        generate_shortforms_and_letters=self._generate_shortforms_and_letters,
                                                         parser=self._native_endpoint_default_parser)
             if self._endpoint_calling_func is not None:
                 endpoint.set_calling_func(self._endpoint_calling_func)

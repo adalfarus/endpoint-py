@@ -233,13 +233,13 @@ class Argument:
 
         return " ".join(frag if self.required else f"[{frag}]" for frag in frags)
 
-    def left_column(self) -> str:
+    def left_column(self, split_positionals: bool) -> str:
         """Build left help-column text.
 
         :return: Left-column string.
         """
         names = ""
-        if not self.kwarg_only:
+        if not self.kwarg_only and not split_positionals:
             names += self.name + " / "
         names += self.option_names()
         mv = self.name  # self.computed_metavar()
@@ -272,7 +272,7 @@ class Argument:
 
         return meta
 
-    def right_column(self) -> str:
+    def right_column(self, split_positionals: bool) -> str:
         """Build right help-column text.
 
         :return: Right-column string.
@@ -280,7 +280,7 @@ class Argument:
         text = (self.help or "").strip()
         meta = self.meta_parts()
 
-        if meta:
+        if meta and not split_positionals:
             text = (text + (" " if text else "") + f"({'; '.join(meta)})").strip()
 
         return text
