@@ -177,7 +177,8 @@ class Interface:
         """
         if arguments is None:
             arguments = sys.argv
-        arguments.append("")  # Fixes parsing when we have no structure
+        if len(arguments) == 1:  # TODO: Fix properly?
+            arguments.append("")  # Fixes parsing when we have no structure
         (pre_args, args_to_parse, endpoint, substructure) = self._parse_pre_args(arguments, skip_first_arg)
         endpoint: EndpointProtocol | None = endpoint or self._default_endpoint
         path: str = self._help_separator.join(pre_args)
