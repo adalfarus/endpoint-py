@@ -87,13 +87,14 @@ def test_parse_cli_long_help_prints_endpoint_help(capsys: pytest.CaptureFixture[
     assert "usage: run" in out
 
 
-def test_parse_cli_default_message_endpoint_is_used(capsys: pytest.CaptureFixture[str]) -> None:
-    itf = Interface("prog", NativeEndpoint("default", function=lambda: print("not a valid endpoint")))
-    path, _ = itf.parse_cli(["prog", "unknown"], skip_first_arg=True)
-    out = capsys.readouterr().out
-
-    assert path == ""
-    assert "not a valid endpoint" in out
+#! Bahavior has changed, now just the help is shown
+# def test_parse_cli_default_message_endpoint_is_used(capsys: pytest.CaptureFixture[str]) -> None:
+#     itf = Interface("prog", NativeEndpoint("default", function=lambda: print("not a valid endpoint")))
+#     path, _ = itf.parse_cli(["prog", "unknown"], skip_first_arg=True)
+#     out = capsys.readouterr().out
+#
+#     assert path == ""
+#     assert "not a valid endpoint" in out
 
 
 def test_parse_pre_args_with_skip_first_arg_false() -> None:
@@ -101,6 +102,16 @@ def test_parse_pre_args_with_skip_first_arg_false() -> None:
     itf.path("run", lambda: None, "run help")
 
     pre, tail, endpoint, _ = itf._parse_pre_args(["prog", "run"], skip_first_arg=False)
+    assert pre == ["prog", "run"]
+    assert tail == []
+    assert endpoint is not None
+
+
+def test_parse_without_structure() -> None:
+    itf = Interface("prog", NativeEndpoint("default"))
+    itf.path("", lambda: None, "run help")
+
+    pre, tail, endpoint, _ = itf._parse_pre_args(["prog", "run"], skip_first_arg=False)
     assert pre == ["prog"]
     assert tail == ["run"]
-    assert endpoint is not None
+    assert endpoint is None
