@@ -346,7 +346,7 @@ def rename_structure(structure: _Node, new_name: str) -> None:
     current_base.set_name(new_name)
 
 
-def structure_help(structure: _Node, *, separator: str = " -> ") -> str:
+def structure_help(structure: _Node, *, separator: str = " -> ", show_help_args: bool = False) -> str:
     """Render command-tree help output.
 
     The tree is interpreted as a command hierarchy:
@@ -361,6 +361,7 @@ def structure_help(structure: _Node, *, separator: str = " -> ") -> str:
 
     :param structure: Root :class:`_Node` of command structure.
     :param separator: Separator used for displayed command paths.
+    :param show_help_args: If automatic help args for endpoints should be shown.
     :return: Formatted multi-line command help text.
     """
     output: str = "commands:"
@@ -372,6 +373,9 @@ def structure_help(structure: _Node, *, separator: str = " -> ") -> str:
         if content is None:
             content_help = ""
         else:
-            content_help = " " + content.generate_help(prog="").strip().splitlines()[0].strip().removeprefix("usage:  ")
+            if not show_help_args:
+                content_help = " " + content.generate_help(prog="", automatic_help_args=tuple()).strip().splitlines()[0].strip().removeprefix("usage:  ")
+            else:
+                content_help = " " + content.generate_help(prog="").strip().splitlines()[0].strip().removeprefix("usage:  ")
         output += "\n  " + path.ljust(max_len, " ") + content_help + " " * 5 + node.get_help()
     return output
