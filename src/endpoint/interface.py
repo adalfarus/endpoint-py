@@ -2,6 +2,7 @@ import sys
 
 # Internal import
 from .endpoints import EndpointProtocol, NativeEndpoint
+from .native_parser import Parser
 from .structure import _Node, rename_structure, Structure, add_command_to_structure, StructureError, structure_help
 
 # Standard typing imports for aps
@@ -28,7 +29,8 @@ class Interface:
                  automatic_help_args: tuple[str, ...] = ("-?", "-h", "--?", "--help"),
                  automatic_long_help_args: tuple[str, ...] = ("--?", "--help"), help_separator: str = " -> ",
                  structure: _Node | None = None, add_to_structure: bool = True, *, path_separator: str = "::",
-                 generate_shortforms_and_letters: bool = True, native_endpoint_default_parser: str = "native") -> None:
+                 generate_shortforms_and_letters: bool = True,
+                 native_endpoint_default_parser: Parser | None = None) -> None:
         """Initialize interface configuration and root structure.
 
         :param interface_name: Root command name.
@@ -41,7 +43,7 @@ class Interface:
         :param add_to_structure: Whether unknown path segments may be created on registration.
         :param path_separator: Token separator used while registering paths.
         :param generate_shortforms_and_letters: Whether function-derived endpoints auto-generate aliases.
-        :param native_endpoint_default_parser: Parser preset key for auto-wrapped callables.
+        :param native_endpoint_default_parser: Parser preset for auto-wrapped callables.
         :return: None.
         :raises ValueError: If long-help tokens are not included in ``automatic_help_args``.
         """
@@ -52,6 +54,8 @@ class Interface:
             default_endpoint = NativeEndpoint.from_function(lambda: print(default_endpoint_or_message), "",
                                                             generate_shortforms_and_letters=generate_shortforms_and_letters,
                                                             parser=native_endpoint_default_parser)
+        elif default_endpoint_or_message is None:
+            default_endpoint = default_endpoint_or_message
         elif not isinstance(default_endpoint_or_message, EndpointProtocol):
             default_endpoint = NativeEndpoint.from_function(default_endpoint_or_message, "",
                                                             generate_shortforms_and_letters=generate_shortforms_and_letters,
@@ -173,12 +177,15 @@ class Interface:
         """
         if arguments is None:
             arguments = sys.argv
+        arguments.append("")  # Fixes parsing when we have no structure
         (pre_args, args_to_parse, endpoint, substructure) = self._parse_pre_args(arguments, skip_first_arg)
         endpoint: EndpointProtocol | None = endpoint or self._default_endpoint
         path: str = self._help_separator.join(pre_args)
 
         if endpoint is None:  # No path endpoint and also no default endpoint
             print(structure_help(substructure, separator=self._help_separator))
+            sys.exit(0)
+            return path, (list(), dict())
 
         for arg in args_to_parse:
             if arg in self._automatic_help_args:

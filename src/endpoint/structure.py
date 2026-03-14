@@ -237,7 +237,7 @@ def _parse_command_path(command_path: str, separator: str = "::") -> list[str]:
             separator_i = 0
     path.append(command_path[last_separator:])
 
-    if path[-1] == "":
+    if len(path) != 1 and path[-1] == "":
         raise StructureError(f"Path '{command_path}' cannot terminate at ''.")
     return path
 
@@ -281,7 +281,7 @@ def _parse_command_path_escaped(command_path: str, separator: str = "::") -> lis
         current_segment_buffer += separator[:separator_i]
     path.append(current_segment_buffer)
 
-    if path[-1] == "":
+    if len(path) != 1 and path[-1] == "":
         raise StructureError(f"Path '{command_path}' cannot terminate at ''.")
     return path
 
