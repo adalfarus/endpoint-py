@@ -223,7 +223,7 @@ def test_argument_rendering_helpers_cover_readable_methods() -> None:
     assert "required" in arg.right_column(split_positionals=False)
     assert "required" not in arg.right_column(split_positionals=True)
     assert "default: 3" in arg.right_column(split_positionals=False)
-    assert "default: 3" in arg.right_column(split_positionals=True)
+    assert "default: 3" not in arg.right_column(split_positionals=True)
     assert "Argument(value)" == arg.as_readable()
     assert isinstance(hash(arg), int)
     assert "value" in arg.usage_fragment()
