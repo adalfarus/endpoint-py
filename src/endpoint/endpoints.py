@@ -135,7 +135,7 @@ class ArgumentChanges(_ty.TypedDict, total=False):
     metavar: str | None
     nargs: NARGS_TYPE
     checking_func: _a.Callable[[Argument, _ty.Any], _ty.Any | ArgumentParsingError] | None
-class NativeEndpoint(EndpointProtocol):
+class NativeEndpoint(EndpointProtocol):  # TODO: As '-argument' is now valid we need to stop using only -- in conversion and help
     """Represents the endpoint of a trace from an argument structure object.
 
     The `EndPoint` class serves as a container for functions associated with

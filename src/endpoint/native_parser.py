@@ -1418,6 +1418,7 @@ class NativeParser(Parser):
         kwarg_values: dict[str, list[str]] = defaultdict(list)
         errors: list[ArgumentParsingError] = list()
         skip_next: bool = False
+        last_token: str = " "
 
         while token := stream.consume():
             if skip_next:
@@ -1425,7 +1426,7 @@ class NativeParser(Parser):
                 curr_pos_arg += token
             elif token == "\\":
                 skip_next = True
-            elif token == "-":
+            elif token == "-" and last_token == " ":
                 if curr_pos_arg != "":
                     posarg_values.append(curr_pos_arg)
                     curr_pos_arg = ""
@@ -1518,6 +1519,7 @@ class NativeParser(Parser):
                                   stream, errors)
             else:
                 curr_pos_arg += token
+            last_token = token
 
         if curr_pos_arg != "":
             posarg_values.append(curr_pos_arg)
