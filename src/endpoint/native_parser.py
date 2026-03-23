@@ -574,7 +574,7 @@ class NativeStringParserFragment(NativeParserFragment):
                 for delimiter in self._delimiters:
                     if input_.startswith(delimiter) and input_.endswith(delimiter):
                         return input_.removeprefix(delimiter).removesuffix(delimiter)
-            return input_
+            return input_ if not input_ == "__NONE__" else None
         fake_stream: TokenStream = TokenStream("'" + "' '".join(input_lst) + "'")
         fake_stream.set_index(len(input_lst[0]) + 4)
         return ArgumentParsingError("A string can't be composed of multiple inputs.", ParsingErrorSeverity.DOES_NOT_APPLY, fake_stream)
@@ -1229,6 +1229,7 @@ class NativeParser(Parser):
                 break
         return None
 
+    # TODO: Modernize Parse full argument
     def _parse_full_argument(self, argument_name: str, stream: TokenStream) -> tuple[str, str] | ArgumentParsingError:
         """Parse a complete ``name=value`` pair from stream context.
 
@@ -1267,6 +1268,17 @@ class NativeParser(Parser):
                     break
                 stream.reverse()
                 break
+            elif token in ("(", "[", "{", "<") and argument_value == "":
+                stream.reverse()
+                argument_value = self._parse_bracket(stream, token)
+                next_token = stream.consume()
+                if next_token is not None and next_token not in " ,":
+                    return ArgumentParsingError(
+                        "You cannot have a non delimiting token next to the end of a string.",
+                        ParsingErrorSeverity.SKIP_TO_NEXT_SPACE, stream.copy())
+                elif next_token is None:
+                    break
+                stream.reverse()
             else:
                 # last_space = False
                 argument_value += token
@@ -1306,7 +1318,7 @@ class NativeParser(Parser):
         :param error_lst: Mutable error sink list.
         :return: Parsed value or fallback replacement.
         """
-        if not isinstance(possible_error, ArgumentParsingError):
+        if not isinstance(possible_error, Exception):
             return possible_error
         # possible_error.raise_()  # TODO: Handled the high severity error right? (stop parsing)
         if possible_error.severity == ParsingErrorSeverity.SKIP_TO_NEXT_SPACE:
