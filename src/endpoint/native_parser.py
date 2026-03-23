@@ -6,7 +6,7 @@ import abc
 import sys
 
 # Internal imports
-from .functional import BrokenType, NoDefault, pretty_type
+from .functional import BrokenType, NoDefault, pretty_type, break_type
 
 # Standard typing imports for aps
 import typing_extensions as _te
@@ -561,6 +561,16 @@ class NativeUnionParserFragment(NativeParserFragment):
     def _iter(self, input_: X, composite_type: BrokenType) -> _a.Iterable[tuple[_ty.Any, str | list[str], tuple[BrokenType, ...]]]:
         return [(None, input_, composite_type.arguments)]
 
+class NativeLiteralParserFragment(NativeParserFragment):
+    """Pass-through fragment used while trying union alternatives."""
+    REPLACE = True
+
+    def _parse(self, input_lst: list, last_failed: bool) -> X | ArgumentParsingError:
+        return input_lst
+
+    def _iter(self, input_: X, composite_type: BrokenType) -> _a.Iterable[tuple[_ty.Any, str | list[str], tuple[BrokenType, ...]]]:
+        return [(None, input_, tuple(break_type(type(x)) for x in composite_type.arguments))]
+
 class NativeStringParserFragment(NativeParserFragment):
     """Parse string arguments with optional quote unwrapping."""
     def __init__(self, parse_python_types: bool = True, delimiters: str = "'\"") -> None:
@@ -893,6 +903,9 @@ class NativeSetParserFragment(NativeIterableParserFragment):
         input_.remove(to_set[0])  # Old element
         input_.add(to_set[1])  # Parsed element
 
+# TODO: Add new flag to NativeParser that denotes that each returned type can only be parsed for that arg at that index,
+#  except for tuples in case of ', ...'!? So make setting only apply to a specific index?
+#  For all even without NativeParserFragment flag?
 class NativeTupleParserFragment(NativeIterableParserFragment):
     """Tuple-specialized iterable fragment."""
     REPLACE_WITH_SET = True
@@ -1022,6 +1035,7 @@ class NativeParser(Parser):
         """
         self._parser_fragments: dict[type[E], type[NativeParserFragment[E]]] = {
             _ty.Union: NativeUnionParserFragment,
+            _ty.Literal: NativeLiteralParserFragment,
             str: NativeStringParserFragment,
             int: NativeIntegerParserFragment,
             float: NativeFloatingPointNumberParserFragment,
@@ -1143,7 +1157,7 @@ class NativeParser(Parser):
         if end_bracket is None:
             raise ValueError(f"Unknown start bracket '{start_bracket}'.")
         string: str = ""
-        currently_opened: int = 1
+        currently_opened: int = 0  # We increment it with the starting bracket
         while token := stream.consume():
             if token == end_bracket:
                 currently_opened -= 1
@@ -1253,6 +1267,7 @@ class NativeParser(Parser):
             elif token == "\\":
                 skip_next = True
             elif token == " ":
+                stream.reverse()  # So the outside also knows there was a space
             #     last_space = Tru
                 break
             # elif token == "-":
@@ -1587,7 +1602,7 @@ class NativeParser(Parser):
                     if not is_parsed:
                         finished.append((identifier, s))
                         (value_errors if outside_value_errors is None else outside_value_errors).extend(local_value_errors)  # Expose type errors
-                        self._defuse_error(None, ArgumentParsingError(f"Could not parse '{s}'."), TokenStream(""),
+                        self._defuse_error(None, ArgumentParsingError(f"Could not parse '{s}' to available types ({', '.join(pretty_type(t.base_type) for t in types)})."), TokenStream(""),
                                            value_errors if outside_value_errors is None else outside_value_errors)
                         return _SENTINEL
                 if fragment.REPLACE:
@@ -1905,7 +1920,8 @@ class NativeParser(Parser):
                     output += f"\n   There {inner_wording} during the parsing of the arguments for the argument:\n\n"
                     for j, parsing_error in enumerate(error.parsing_errors, 1):
                         output += f"   {j}. {parsing_error.message}\n"
-                        output += f"      > index: {parsing_error.stream.get_index()}\n"
+                        if parsing_error.stream is not None:
+                            output += f"      > index: {parsing_error.stream.get_index()}\n"
                         output += f"      > input: {parsing_error.show()}\n"
             raise ValueError(output + "\n" + endpoint_help_func())
             print(output)
