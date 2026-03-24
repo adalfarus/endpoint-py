@@ -36,21 +36,13 @@ class EndpointError(Exception):
         super().__init__(message)
 
 
+
 P = _ty.ParamSpec("P")
 R = _ty.TypeVar("R")
-class CallingFunc(_ty.Protocol[P, R]):
-    """Protocol for custom endpoint invocation wrappers."""
-
-    def __call__(self, endpoint: "EndpointProtocol", fn: _a.Callable[P, R], *args: P.args, **kwargs: P.kwargs) -> R:
-        """Execute ``fn`` for an endpoint with full call context.
-
-        :param endpoint: Endpoint that owns the function.
-        :param fn: Target callable to execute.
-        :param args: Positional call arguments.
-        :param kwargs: Keyword call arguments.
-        :returns: Wrapped call result.
-        """
-        ...
+CallingFunc = _a.Callable[
+    _ty.Concatenate["EndpointProtocol", _a.Callable[P, R], P],
+    R,
+]
 class EndpointProtocol(metaclass=abc.ABCMeta):
     """Abstract interface implemented by endpoint parser backends."""
 
@@ -67,6 +59,12 @@ class EndpointProtocol(metaclass=abc.ABCMeta):
         """Set a custom invocation wrapper.
 
         :param func: Wrapper callable that controls endpoint invocation.
+        """
+        ...
+    @abc.abstractmethod
+    def get_function(self) -> None | _a.Callable:
+        """
+        Returns the function the endpoint will be calling. Can return None if no function was set.
         """
         ...
     @abc.abstractmethod
@@ -184,6 +182,9 @@ class NativeEndpoint(EndpointProtocol):  # TODO: As '-argument' is now valid we 
         :param func: Wrapper callable or ``None`` to disable wrapping.
         """
         self._calling_func = func
+
+    def get_function(self) -> None | _a.Callable:
+        return self._function
 
     # TODO: Make more efficient?
     def _check_and_sort_arguments(self) -> list[Argument]:
@@ -636,12 +637,12 @@ class ArgparseEndpoint(EndpointProtocol):
         self._argument_defaults: dict[str, _ty.Any] = dict()
         self._argument_types: dict[str, _ty.Any] = dict()
 
-    def set_calling_func(self, func: _a.Callable) -> None:
+    def set_calling_func(self, func: _a.Callable | None) -> None:
         """Set the callback executed after parsing.
 
         :param func: Callable receiving parsed args and kwargs.
         """
-        self._func = func
+        self._func: _a.Callable | None = func
 
     def call(self, args: tuple[_ty.Any], kwargs: dict[str, _ty.Any]) -> None:
         """Execute the configured callback with parsed values.
@@ -652,6 +653,9 @@ class ArgparseEndpoint(EndpointProtocol):
         if self._func is None:
             return
         self._func(*args, **kwargs)
+
+    def get_function(self) -> None | _a.Callable:
+        return self._func
 
     def add_argument(self, *args, **kwargs) -> None:
         """Delegate argument registration to underlying argparse parser."""
