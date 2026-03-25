@@ -1658,11 +1658,11 @@ class NativeParser(Parser):
                             else:
                                 break
                 elif difference > 0:  # Decrease capture
-                    remaining_diff: int = abs(difference)
+                    remaining_diff: int = difference
                     for arg, (curr, i) in reversed(trying_numbers.copy().items()):
                         while remaining_diff > 0 and i > 0:
-                            if (arg.nargs.is_higher_min(curr) and (not arg.nargs.spec.n is None or loop_n == 1)) or (
-                                    not arg.required and loop_n == 1):
+                            if ((arg.nargs.is_higher_min(curr) and (not arg.nargs.spec.n is None or loop_n == 1)) or (
+                                    not arg.required and loop_n == 1) and not arg.kwarg_only):
                                 changed = True
                                 curr -= 1
                                 i -= 1
@@ -1672,14 +1672,14 @@ class NativeParser(Parser):
                                 break
 
                 if not changed and loop_n > 1:  # Minimum possible difference reached
-                    wording: str = "were" if abs(difference) > 1 else "was"
+                    wordings: tuple[str, str] = ("were", "arguments") if abs(difference) > 1 else ("was", "argument")
                     if difference < 0:
                         argument_distribution_errors.append(ValueParsingError(
-                            f"There {wording} {abs(difference)} positional arguments too much ({posarg_values}).",
+                            f"There {wordings[0]} {abs(difference)} positional {wordings[1]} too much ({posarg_values}).",
                             None))
                     else:
                         argument_distribution_errors.append(ValueParsingError(
-                            f"There {wording} {abs(difference)} arguments too few ({posarg_values}, {kwarg_values}).",
+                            f"There {wordings[0]} {abs(difference)} {wordings[1]} too few ({posarg_values}, {kwarg_values}).",
                             None))
                     break
                 loop_n += 1
