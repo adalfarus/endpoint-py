@@ -77,7 +77,7 @@ class BrokenType:
         return str(self)
 
 
-def break_type(type_annotation: _ty.Any) -> BrokenType | tuple[BrokenType]:  # _ty.Any | BrokenType | tuple[_ty.Any | BrokenType, ...]:
+def break_type(type_annotation: _ty.Any) -> BrokenType:  # _ty.Any | BrokenType | tuple[_ty.Any | BrokenType, ...]:
     """Recursively normalize a typing annotation into :class:`BrokenType`.
 
     Leaves such as ``int`` or ``str`` are represented as a node without
@@ -385,8 +385,8 @@ def analyze_function(function: _a.Callable, /, break_types: bool = True, guess_t
     arg_count: int = code.co_argcount + code.co_kwonlyargcount
     has_args: bool = (code.co_flags & 0b0100) == 4
     has_kwargs: bool = (code.co_flags & 0b1000) == 8
-    defaults: tuple[_ty.Any, ...] = function.__defaults__ or ()
-    kwdefaults: dict[str, _ty.Any] = function.__kwdefaults__ or ()
+    defaults: tuple[_ty.Any, ...] = function.__defaults__ or tuple()
+    kwdefaults: dict[str, _ty.Any] = function.__kwdefaults__ or dict()
     len_defaults: int = len(defaults) + len(kwdefaults)
     len_no_defaults: int = arg_count - len_defaults
     types = _ty.get_type_hints(function) or {}  # Cannot use __annotations__ here as they are just strings if types were deferred with 'from __future__ import annotations'
@@ -450,7 +450,7 @@ def analyze_function(function: _a.Callable, /, break_types: bool = True, guess_t
                     "is_kwarg": False})
         else:
             if has_args:
-                type_ = tuple[_ty.Any]
+                type_ = tuple[types.get(argname, _ty.Any)]
                 has_args = False
                 result["arguments"].insert(code.co_argcount, {
                     "name": argname, "default": tuple(), "choices": choices,
@@ -458,7 +458,7 @@ def analyze_function(function: _a.Callable, /, break_types: bool = True, guess_t
                     "doc_help": help_str, "pos_only": True, "kwarg_only": False, "is_arg": True,
                     "is_kwarg": False})
             elif has_kwargs:
-                type_ = dict[str, _ty.Any]
+                type_ = dict[str, types.get(argname, _ty.Any)]
                 has_kwargs = False
                 result["arguments"].append({
                     "name": argname, "default": dict(), "choices": choices,

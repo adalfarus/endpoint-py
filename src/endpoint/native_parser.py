@@ -6,7 +6,7 @@ import abc
 import sys
 
 # Internal imports
-from .functional import BrokenType, NoDefault, pretty_type, break_type
+from .functional import ArgumentAnalysis, BrokenType, NoDefault, pretty_type, break_type
 
 # Standard typing imports for aps
 import typing_extensions as _te
@@ -562,7 +562,7 @@ class NativeUnionParserFragment(NativeParserFragment):
         return [(None, input_, composite_type.arguments)]
 
 class NativeLiteralParserFragment(NativeParserFragment):
-    """Pass-through fragment used while trying union alternatives."""
+    """Pass-through fragment used while trying literal alternatives."""
     REPLACE = True
 
     def _parse(self, input_lst: list, last_failed: bool) -> X | ArgumentParsingError:
@@ -570,6 +570,11 @@ class NativeLiteralParserFragment(NativeParserFragment):
 
     def _iter(self, input_: X, composite_type: BrokenType) -> _a.Iterable[tuple[_ty.Any, str | list[str], tuple[BrokenType, ...]]]:
         return [(None, input_, tuple(break_type(type(x)) for x in composite_type.arguments))]
+
+class NativeAnyParserFragment(NativeParserFragment):
+    """Fragment for reaching through any"""
+    def _parse(self, input_lst: list, last_failed: bool) -> X | ArgumentParsingError:
+        return input_lst
 
 class NativeStringParserFragment(NativeParserFragment):
     """Parse string arguments with optional quote unwrapping."""
@@ -718,6 +723,7 @@ class NativeDictParserFragment(NativeParserFragment):
 
     def _parse(self, input_lst: list, last_failed: bool) -> X | ArgumentParsingError:
         return_dict: dict[str, str] = dict()
+
         if len(input_lst) == 1:
             if self._parse_python_types:
                 for start, end in self._brackets.items():
@@ -1036,6 +1042,7 @@ class NativeParser(Parser):
         self._parser_fragments: dict[type[E], type[NativeParserFragment[E]]] = {
             _ty.Union: NativeUnionParserFragment,
             _ty.Literal: NativeLiteralParserFragment,
+            _ty.Any: NativeAnyParserFragment,
             str: NativeStringParserFragment,
             int: NativeIntegerParserFragment,
             float: NativeFloatingPointNumberParserFragment,
@@ -1414,12 +1421,14 @@ class NativeParser(Parser):
     # TODO: Easy to switch out ArgumentParsers and ArgumentValueParsers (For no_positional_args and similar)
     # TODO: Flag bool letters as letter strings vs arguments with one - and longer names
     def parse_args(self, args: list[str], arguments: list[Argument], endpoint_path: str,
-                   endpoint_help_func: _a.Callable[[], str]) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
+                   endpoint_help_func: _a.Callable[[], str], arg_arg: Argument | None = None, 
+                   kwarg_arg: ArgumentAnalysis | None = None) -> tuple[list[_ty.Any], dict[str, _ty.Any]]:
         """Parse CLI tokens against endpoint argument definitions.
 
         :param args: Raw CLI token list.
         :param arguments: Argument metadata for target endpoint.
         :param endpoint_path: Endpoint identifier used in diagnostics.
+        :param kwarg_arg: What is used to parse extra kwargs.
         :return: Parsed ``(positionals, kwargs)``.
         :raises ArgumentParsingError: On unrecoverable parse failures.
         """
@@ -1704,7 +1713,7 @@ class NativeParser(Parser):
 
             last_n: int = 0
             for arg in arguments:
-                parsed_strings: list[str] = kwarg_values.pop(arg.metavar, [])
+                parsed_strings: list[str] = kwarg_values.pop(arg.metavar, list())
                 wanted_n: int = trying_numbers[arg][1]
                 wanted_posargs: list[str] = posarg_values[last_n:last_n+wanted_n]
                 last_n += wanted_n
@@ -1756,9 +1765,29 @@ class NativeParser(Parser):
                     continue
 
                 if arg.positional_only and not self._return_all_posonly_as_kwarg:
-                    parsed_posargs.append(parsed)
+                    if (arg == arg_arg):
+                        parsed_posargs.extend(parsed)
+                    else:
+                        parsed_posargs.append(parsed)
                 else:
                     parsed_kwargs[arg.name] = parsed
+            
+            if (kwarg_arg is not None):
+                parsed: _ty.Any = _SENTINEL
+                caught_parsing_errors: list[ArgumentParsingError] = list()
+                for i in range(2):
+                    parsed = _walk_value_type(break_type(kwarg_arg.type), ["{" + ", ".join(f"{k}: " + "[" + ", ".join(v) + "]" for k, v in kwarg_values.items()) + "}"], caught_parsing_errors, i==1)
+                    if (parsed is _SENTINEL):
+                        continue
+                    else:
+                        break;
+                if (parsed is _SENTINEL): # Parsing failed completel
+                    value_errors.append(
+                        ValueParsingError(f"The value of an argument could not be parsed to it's type.", None,
+                                          caught_parsing_errors, ValueParsingSeverity.DOES_NOT_APPLY))
+                else:
+                    kwarg_values = parsed
+            #self.parsers.get(dict)._iter(kwarg_values, break_type(kwarg_arg.type).arguments[1])  # Remaining kwargs, parsed to composite type of dict value type
             parsed_kwargs.update(kwarg_values)
         else:
             def _get(from_: list, index: int) -> _ty.Any:
@@ -1782,7 +1811,7 @@ class NativeParser(Parser):
                     #   => If at the end positionals remain, we try to adjust our "how many args for this one" assumptions.
                     #   => If not possible we exit the loop and declare this a success.
                     raise NotImplementedError(f"Non deterministic nargs are not set to allowed.")
-                parsed_strings: list[str] = kwarg_values.pop(arg.metavar, [])
+                parsed_strings: list[str] = kwarg_values.pop(arg.metavar, list())
 
                 if parsed_strings:
                     severity: ValueParsingSeverity = ValueParsingSeverity.REQUIRED_ARG if arg.required else ValueParsingSeverity.NOT_REQUIRED_ARG
@@ -1889,7 +1918,10 @@ class NativeParser(Parser):
                         continue
 
                     if arg.positional_only and not self._return_all_posonly_as_kwarg:
-                        parsed_posargs.append(parsed_pos)
+                        if (arg == arg_arg):
+                            parsed_posargs.extend(parsed_pos)
+                        else:
+                            parsed_posargs.append(parsed_pos)
                     else:
                         parsed_kwargs[arg.name] = parsed_pos
                 elif not isinstance(arg.default, NoDefault):
@@ -1903,6 +1935,22 @@ class NativeParser(Parser):
             # if len(kwarg_values) != 0 and self._error_if_too_many_kwargs:  # Already handeled by argument parsing now
             #     value_errors.append(ValueParsingError(f"There were unknown named arguments ({dict(kwarg_values)}).", None))
             # else:
+            if (kwarg_arg is not None):
+                parsed: _ty.Any = _SENTINEL
+                caught_parsing_errors: list[ArgumentParsingError] = list()
+                for i in range(2):
+                    parsed = _walk_value_type(break_type(kwarg_arg.type), ["{" + ", ".join(f"{k}: " + "[" + ", ".join(v) + "]" for k, v in kwarg_values.items()) + "}"], caught_parsing_errors, i==1)
+                    if (parsed is _SENTINEL):
+                        continue
+                    else:
+                        break;
+                if (parsed is _SENTINEL): # Parsing failed completel
+                    value_errors.append(
+                        ValueParsingError(f"The value of an argument could not be parsed to it's type.", None,
+                                          caught_parsing_errors, ValueParsingSeverity.DOES_NOT_APPLY))
+                else:
+                    kwarg_values = parsed
+            #self.parsers.get(dict)._iter(kwarg_values, break_type(kwarg_arg.type).arguments[1])  # Remaining kwargs, parsed to composite type of dict value type
             parsed_kwargs.update(kwarg_values)
 
         if [x for x in value_errors if not x.severity < self._ignore_value_parsing_error_below]:

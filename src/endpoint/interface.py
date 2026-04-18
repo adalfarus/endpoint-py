@@ -149,7 +149,7 @@ class Interface:
         """
         if endpoint is not None:
             if not isinstance(endpoint, EndpointProtocol):
-                endpoint = NativeEndpoint.from_function(endpoint, "",
+                endpoint = NativeEndpoint.from_function(endpoint, path,
                                                         function_argument_ignore_prefix=self._function_argument_ignore_prefix,
                                                         ignored_function_arguments=self._ignored_function_arguments,
                                                         generate_shortforms_and_letters=self._generate_shortforms_and_letters,

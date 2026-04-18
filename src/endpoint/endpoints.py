@@ -9,7 +9,7 @@ import shutil
 
 # Internal imports
 from .str_guess import guess_letters, guess_prefix_shortforms, guess_shortforms
-from .functional import break_type, Analysis, get_analysis, NoDefault
+from .functional import break_type, Analysis, get_analysis, NoDefault, ArgumentAnalysis
 from .native_parser import (NativeParser, ArgumentParsingError, Argument, Parser, NArgsMode, NArgsSpec,
                             NArgsModeNumber, NArgsOneOrMore, NArgsZeroOrMore, NArgsMinMax)
 
@@ -145,6 +145,7 @@ class NativeEndpoint(EndpointProtocol):  # TODO: As '-argument' is now valid we 
     :ivar _function: Function executed when the endpoint is called.
     """
     DEFAULT_PARSER: type[Parser] = NativeParser
+    _set_add_auto_arguments: dict[_a.Callable, list[ArgumentAnalysis]] = dict()
 
     def __init__(self, name: str, help_str: str = "", function: _a.Callable | None = None, *,
                  calling_func: CallingFunc | None = None, parser: Parser | None = None) -> None:
@@ -162,6 +163,8 @@ class NativeEndpoint(EndpointProtocol):  # TODO: As '-argument' is now valid we 
         self._help_str: str = help_str
         self._calling_func: CallingFunc | None = calling_func
         self._parser: Parser = parser or self.DEFAULT_PARSER({})
+        self._arg_arg: Argument | None = None
+        self._kwarg_arg: ArgumentAnalysis | None = None
 
     def call(self, args: list[_ty.Any], kwargs: dict[str, _ty.Any]) -> None:
         """Execute the endpoint function with parsed arguments.
@@ -485,7 +488,23 @@ class NativeEndpoint(EndpointProtocol):  # TODO: As '-argument' is now valid we 
                           f"\n- Positionals\n- Keywords\n- Choices\n- Pos-only\n- Keyword-only\n- Pos or Keyword\n- "
                           f"Complex types\n- ...", stacklevel=2)
         try:
-            parsed_pos, parsed_kwarg = self._parser.parse_args(arguments, self.copy_arguments(), self._name, self.generate_help)
+            if (isinstance(self._parser, NativeParser)):
+                parsed_pos, parsed_kwarg = self._parser.parse_args(
+                    args=arguments, 
+                    arguments=self.copy_arguments(), 
+                    endpoint_path=self._name, 
+                    endpoint_help_func=self.generate_help,
+                    arg_arg=self._arg_arg,
+                    kwarg_arg=self._kwarg_arg
+                )
+            else:
+                parsed_pos, parsed_kwarg = self._parser.parse_args(
+                    args=arguments, 
+                    arguments=self.copy_arguments(), 
+                    endpoint_path=self._name, 
+                    endpoint_help_func=self.generate_help,
+                )
+
         except ValueError as e:
             print(f"{e}")
             sys.exit(0)
@@ -562,6 +581,13 @@ class NativeEndpoint(EndpointProtocol):  # TODO: As '-argument' is now valid we 
         return aep
 
     @classmethod
+    def add_arguments(cls, arguments: list[ArgumentAnalysis]) -> _a.Callable:
+        def decorator(function: _a.Callable):
+            cls._set_add_auto_arguments[function] = arguments
+            return function
+        return decorator
+
+    @classmethod
     def from_function(cls, function: _a.Callable, name: str, help_str: str = "", snakecase_replacement: str = "-",
                       function_argument_ignore_prefix: str = "_",
                       ignored_function_arguments: tuple[str, ...] = ("cls", "self"), *,
@@ -583,9 +609,14 @@ class NativeEndpoint(EndpointProtocol):  # TODO: As '-argument' is now valid we 
         ep = cls(name=name, help_str=help_str, function=function, calling_func=calling_func, parser=parser)
         analysis: Analysis = get_analysis(function, break_types=False)
 
-        for arg in analysis.arguments:
+        extra_args: list[ArgumentAnalysis] = cls._set_add_auto_arguments.pop(function) if function in cls._set_add_auto_arguments else list()
+        for arg in analysis.arguments + extra_args:
+            if arg.is_kwarg:
+                ep._kwarg_arg = arg # TODO: Make function for get and set
+            
             if arg.name in ignored_function_arguments or arg.name.startswith(function_argument_ignore_prefix) or arg.is_kwarg:
                 continue
+
             ep.add_argument(
                 name=arg.name,
                 #name=arg.name.replace("_", snakecase_replacement),
@@ -598,6 +629,8 @@ class NativeEndpoint(EndpointProtocol):  # TODO: As '-argument' is now valid we 
                 nargs=NArgsMode.ONE_OR_MORE if not arg.is_arg else NArgsMode.ZERO_OR_MORE,
                 metavar=arg.name.replace("_", snakecase_replacement) if not arg.pos_only else None
             )
+            if arg.is_arg:
+                ep._arg_arg = ep._arguments[-1] # TODO: Add getter and setter
 
         if generate_shortforms_and_letters:
             ep.guess_letters_and_shortforms()
